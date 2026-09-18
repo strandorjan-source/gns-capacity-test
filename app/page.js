@@ -75,11 +75,18 @@ export default function Page() {
     if (!supabase) { setPhase('ready'); return; }
     let stopped = false;
     const timers = new Set();
-    const oauthError = initialAuthError || authErrorFromUrl(window.location.href);
-    if (oauthError) {
-      setMessage(oauthError);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+    const showOAuthError = () => {
+      const error = authErrorFromUrl(window.location.href);
+      if (error) {
+        setMessage(error);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    };
+    if (initialAuthError) setMessage(initialAuthError);
+    showOAuthError();
+    // Handle same-document OAuth error navigation as well as a full callback.
+    window.addEventListener('hashchange', showOAuthError);
+    window.addEventListener('popstate', showOAuthError);
     withTimeout(supabase.auth.getSession()).then(({ data, error }) => {
       if (stopped) return;
       if (error) throw error;
@@ -90,7 +97,11 @@ export default function Page() {
       const timer = setTimeout(() => { timers.delete(timer); if (!stopped) load(nextSession, event === 'TOKEN_REFRESHED'); }, 0);
       timers.add(timer);
     });
-    return () => { stopped = true; ++generation.current; timers.forEach(clearTimeout); data.subscription.unsubscribe(); };
+    return () => {
+      stopped = true; ++generation.current; timers.forEach(clearTimeout); data.subscription.unsubscribe();
+      window.removeEventListener('hashchange', showOAuthError);
+      window.removeEventListener('popstate', showOAuthError);
+    };
   }, [load]);
 
   useEffect(() => {

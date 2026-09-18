@@ -18,9 +18,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Record dependency security diagnostics
+        run: |
+          mkdir -p test-artifacts
+          npm audit --omit=dev --json > test-artifacts/npm-audit.json || true
+          node -e 'const a=require("./test-artifacts/npm-audit.json"); console.log(JSON.stringify(a.vulnerabilities,null,2));'
+          npm view next@16 version --json > test-artifacts/next16-versions.json
+          npm view react@19 version --json > test-artifacts/react19-versions.json
+          node -e 'for(const f of ["next16-versions","react19-versions"]) {const v=require("./test-artifacts/"+f+".json"); console.log(f,Array.isArray(v)?v.slice(-5):v);}'
       - name: Validation and authorization UI unit tests
         run: node --test tests/*.test.mjs
       - name: Production compilation
@@ -39,6 +47,9 @@ jobs:
             sleep 1
           done
           bash tests/browser-smoke.sh
+      - name: Verify public production deployment and Microsoft redirect
+        if: always() && github.ref == 'refs/heads/main'
+        run: bash tests/production-smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
