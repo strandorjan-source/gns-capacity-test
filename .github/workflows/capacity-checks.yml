@@ -21,14 +21,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Record dependency security diagnostics
+      - name: Enforce dependency security audit
         run: |
           mkdir -p test-artifacts
-          npm audit --omit=dev --json > test-artifacts/npm-audit.json || true
-          node -e 'const a=require("./test-artifacts/npm-audit.json"); console.log(JSON.stringify(a.vulnerabilities,null,2));'
-          npm view next@16 version --json > test-artifacts/next16-versions.json
-          npm view react@19 version --json > test-artifacts/react19-versions.json
-          node -e 'for(const f of ["next16-versions","react19-versions"]) {const v=require("./test-artifacts/"+f+".json"); console.log(f,Array.isArray(v)?v.slice(-5):v);}'
+          npm audit --omit=dev --json > test-artifacts/npm-audit.json
+          node -e 'const a=require("./test-artifacts/npm-audit.json"); console.log(a.metadata.vulnerabilities);'
       - name: Validation and authorization UI unit tests
         run: node --test tests/*.test.mjs
       - name: Production compilation
