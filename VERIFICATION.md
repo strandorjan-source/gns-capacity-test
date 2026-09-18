@@ -1,29 +1,26 @@
 # GNS Capacity verification — 18 September 2026
 
-## Verified against the existing Supabase project
+## Live database
 
-Migration `20260918135618_capacity_realtime_revocation_and_vehicle_integrity` was applied to the existing GNS Cargo Ordre database. No order tables or existing users were changed. Twenty-four SQL assertions passed under the actual `authenticated` database role with synthetic test identities. The entire test transaction was rolled back; no test accounts or vehicles were retained.
+The existing GNS Cargo Ordre project has received the migrations `20260918135618_capacity_realtime_revocation_and_vehicle_integrity` and `20260918141623_capacity_verified_profile_identity`. Scope is the two Capacity tables; existing order tables/users were not changed. Twenty-four SQL assertions passed under the actual authenticated database role, followed by two identity/verified-email assertions. Synthetic identities, profiles and vehicles were fully rolled back. Cleanup was checked: zero retained test users, zero vehicles and the original four Capacity profiles.
 
-The checks covered: Admin approval; protection against removing own admin access; Admin and Dispatcher visibility; anonymous denial; registration normalization; duplicate plates across carriers; carrier isolation; denied cross-carrier editing; denied carrier reservation; pending-user isolation, registration denial and self-elevation denial; pending profile completion; Dispatcher inability to grant admin access; server-controlled reservation actor/time; reserve and release; stale-status protection; stale-version/ABA protection; denied deletion and editing of reserved vehicles; immediate loss of vehicle visibility after revocation; and both Capacity tables in the realtime publication.
+Verified: Admin approval and all-vehicle visibility; Dispatcher all-vehicle visibility and reserve/release; Carrier isolation; pending-user isolation and profile completion; prevention of self-approval, self-elevation, spoofed email, stale reservations and duplicate normalized plates; server-controlled reservation actor/time; immutable vehicle ownership; deletion/editing protection for reserved vehicles; immediate loss of read access on revocation; and realtime publication for both tables.
 
-Supabase security advisors were also run. No Capacity-specific warnings were returned. Existing warnings on the separate order-system functions and global leaked-password protection remain outside the scope of this change.
+## Production and browser verification
 
-## Verified locally
+Commit `081a91246a42403ffe2157e3a0299608041c971e` passed GitHub Actions run `35355053105`, including npm ci, 15 unit tests, production compilation, rendered browser checks and a public production probe. `https://gns-capacity-test.vercel.app/api/health` returned HTTP 200, configured=true and that exact commit SHA. Browser verification showed the Microsoft login button; clicking it reached `login.microsoftonline.com` with callback `https://lpovhfipxoeqqnfnipia.supabase.co/auth/v1/callback` and exactly `openid email profile` scopes. These results are in the workflow's `capacity-check-evidence` artifact. The first browser run found a same-document error-fragment bug; it was fixed and the rerun passed.
 
-`node --test tests/capacity.test.mjs`: 15 tests passed. JSX files were syntax-checked using the installed TypeScript parser. This is not a production build or a real OAuth login test.
+The Vercel connector itself returns empty project lists/404 errors and its direct deployment action has a schema mismatch. Deployment nevertheless works through the existing GitHub integration, confirmed by Vercel's successful GitHub commit status and the independent production HTTP/browser checks. No authenticated Cloud Browser session was available; automated Chromium checks ran in GitHub Actions.
 
-## Automated build/browser checks
+## Remaining verification and security work
 
-The `Capacity checks` GitHub Actions workflow installs the existing locked dependencies, runs unit tests, compiles the production application and uses pinned `agent-browser` to verify the rendered login screen and query/fragment OAuth error recovery. CI uses deliberately non-working Supabase credentials. Passing CI does NOT prove real Microsoft authentication, live Supabase sessions or a Vercel production deployment. Consult the workflow run for its actual outcome; creation of a workflow is not a passed run.
+No real Microsoft account credentials were entered. Successful Microsoft authorization-code exchange and the resulting authenticated production browser session are NOT verified. The Azure client secret and tenant settings cannot be read or changed through the available database tools and were not modified. Production cancellation/return testing is being added; consult its actual run before claiming that check passed.
 
-## Outstanding production verification
+npm audit detected one critical and two high dependency findings on the original Next.js 16.1.6 dependency tree and recommended Next.js 16.3.5. A separate read-only workflow prepares and tests that exact candidate and uploads its package/lock files for review. The candidate is not installed in production merely because that workflow exists; final package files must be committed and the subsequent production revision tested.
 
-The connected Vercel service returned empty project lists for both GNS Cargo teams, and a direct lookup of the previously provided project ID returned 404. The deployment action failed input validation because its exposed schema did not provide the parameters required by its backend. The production URL could not be fetched. No authenticated Cloud Browser session was available in the execution environment.
+Supabase security advisors returned no Capacity-specific findings. Existing warnings concerning separate order-system SECURITY DEFINER functions and global leaked-password protection remain outside this change's scope. References:
+- https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable
+- https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable
+- https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
-The Microsoft provider secret/tenant configuration and Supabase Auth URL allowlist were not accessible through the connected database tools and have NOT been changed or verified. The frontend now requests Azure login with PKCE, scopes `email profile`, and the current app origin followed by `/`. Production Supabase Auth must explicitly allow `https://gns-capacity-test.vercel.app/`. The Azure app's Web callback must be the existing Supabase project's `/auth/v1/callback`, not the frontend URL. The client secret must be the secret VALUE, not its identifier.
-
-Before marking production complete, obtain working deployment access, verify provider configuration, deploy the tested commit, then run real Microsoft sign-in, new-user approval, isolated Carrier access, registration, Dispatcher reservation/release, revocation and sign-out on the production domain. Do not report production as complete based only on database or mocked browser checks.
-
-Official setup references:
-- https://supabase.com/docs/guides/auth/social-login/auth-azure
-- https://supabase.com/docs/guides/auth/redirect-urls
+Before marking the entire solution complete, perform a real Microsoft sign-in and verify authenticated profile approval, registration, cross-carrier isolation, reservation/release and revocation in the production browser. Database tests and fake-credential local UI smoke tests alone are not end-to-end Microsoft authentication evidence.

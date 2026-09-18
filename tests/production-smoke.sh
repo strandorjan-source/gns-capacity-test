@@ -34,5 +34,14 @@ agent-browser --session production-smoke find role button click --name 'Logg inn
 agent-browser --session production-smoke wait --url '**login.microsoftonline.com**'
 agent-browser --session production-smoke eval '(() => {const u=new URL(location.href); if(u.hostname!=="login.microsoftonline.com") throw new Error("Microsoft login not reached"); const callback=u.searchParams.get("redirect_uri"); if(callback!=="https://lpovhfipxoeqqnfnipia.supabase.co/auth/v1/callback") throw new Error("Wrong Supabase callback"); const scopes=(u.searchParams.get("scope")||"").split(" "); if(!scopes.includes("email") || scopes.filter(s=>s==="openid").length!==1) throw new Error("Invalid OAuth scopes"); return JSON.stringify({host:u.hostname,callback,scopes,realMicrosoftLoginCompleted:false});})()' | tee test-artifacts/production-oauth-start.json
 agent-browser --session production-smoke screenshot test-artifacts/microsoft-sign-in.png
-echo 'PASS: production revision, rendered login, Microsoft redirect, callback and scopes.'
-echo 'NOT TESTED: account credentials, Microsoft callback code exchange, authenticated production session.'
+# Return a cancellation for this test's own OAuth state; no identity/session is issued.
+# This checks the actual Supabase redirect allowlist rather than assuming redirectTo was accepted.
+agent-browser --session production-smoke eval '(() => {const u=new URL(location.href); const state=u.searchParams.get("state"); if(!state) throw new Error("Missing test OAuth state"); const callback=new URL("https://lpovhfipxoeqqnfnipia.supabase.co/auth/v1/callback"); callback.searchParams.set("error","access_denied"); callback.searchParams.set("error_description","Test sign-in cancelled"); callback.searchParams.set("state",state); window.location.assign(callback.toString()); return "Returning test cancellation";})()'
+agent-browser --session production-smoke wait --url '**gns-capacity-test.vercel.app**'
+agent-browser --session production-smoke wait --load networkidle
+agent-browser --session production-smoke eval 'location.origin === "https://gns-capacity-test.vercel.app" && location.hash === "" && !location.search.includes("error") ? "SAFE_RETURN" : "UNEXPECTED_RETURN"' | grep -q 'SAFE_RETURN'
+agent-browser --session production-smoke get text body | tee test-artifacts/production-cancel-return.txt
+grep -q 'avbrutt eller avvist' test-artifacts/production-cancel-return.txt
+agent-browser --session production-smoke screenshot test-artifacts/production-cancel-return.png
+echo 'PASS: production revision, login, Microsoft redirect, callback, scopes and cancellation return without localhost.'
+echo 'NOT TESTED: account credentials, successful Microsoft callback code exchange, authenticated production session.'

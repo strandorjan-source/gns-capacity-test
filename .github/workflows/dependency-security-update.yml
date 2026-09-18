@@ -1,0 +1,51 @@
+name: Prepare reviewed dependency security update
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/dependency-security-update.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SUPABASE_URL: https://capacity-ci.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_not_a_real_key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare exact update recommended by npm audit
+        run: npm install --save-exact next@16.3.5
+      - name: Audit, compile and test candidate
+        run: |
+          npm audit --omit=dev --json > npm-audit-candidate.json
+          node --test tests/*.test.mjs
+          npm run build
+      - name: Browser-check candidate
+        run: |
+          npm install --global agent-browser@0.38.1
+          agent-browser install --with-deps
+          npm start > server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          bash tests/browser-smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reviewed-security-candidate
+          path: |
+            package.json
+            package-lock.json
+            npm-audit-candidate.json
+            test-artifacts/
+            server.log
+          retention-days: 7
