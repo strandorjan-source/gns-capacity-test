@@ -1,0 +1,49 @@
+name: Capacity checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SUPABASE_URL: https://capacity-ci.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_not_a_real_key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Validation and authorization UI unit tests
+        run: node --test tests/*.test.mjs
+      - name: Production compilation
+        run: npm run build
+      - name: Install pinned browser verification tool
+        run: |
+          npm install --global agent-browser@0.38.1
+          agent-browser install --with-deps
+      - name: Verify rendered app and OAuth error recovery
+        run: |
+          npm start > server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          bash tests/browser-smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capacity-check-evidence
+          path: |
+            test-artifacts/
+            server.log
+          retention-days: 7
