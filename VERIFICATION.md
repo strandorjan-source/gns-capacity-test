@@ -3,13 +3,13 @@
 Implemented admin vehicle editing, recoverable deletion/restore, automatic Norwegian-calendar-day history, explicit rear/side door types, reservation actor name/email/time and optional load comments, plus a protected event log. Same plate may be entered on different dates; a duplicate on the same Norwegian date is rejected. Existing door types remain unknown unless previously explicit. Existing reservations are imported with their recorded actor/time; earlier actions cannot be reconstructed.
 
 Validation before deployment:
-- 22 Node unit checks passed, including Norwegian date boundaries, door validation, payload ownership/booking protection and preserving booking fields during editing.
+- 28 Node checks passed (22 logic tests and six rendered-component tests), including Norwegian date boundaries, door validation, payload ownership/booking protection and preserving booking fields during editing.
 - Next.js production build passed.
 - Transactional database integration checks in `supabase/tests/capacity_history_booking.sql` passed for admin, dispatcher, two isolated carriers, pending/revoked users and anonymous access. Tested registration, current/past dates, duplicates, door validation, reservation attribution/time spoof protection, immutable comments, edit audit, stale writes, release, recoverable deletion/restore and audit write denial. All fixtures rolled back.
 - Production database retains its four original vehicles and two reservations. Both reservation names/emails are populated. No test identities remain.
 - No new Capacity advisor findings. Shared order-system and global auth warnings listed below are unchanged.
 
-Successful Microsoft login and authenticated production UI interactions have not been verified in this session. Public deployment verification follows publication; do not infer an authenticated browser test from SQL role tests.
+Successful Microsoft login and authenticated production UI interactions have not been verified in this session. Production revision `30da2a8a566739bbb8233d20899da69a8baf5c09` returned configured=true and Vercel success. The production login page rendered without application console errors. This confirms public deployment, not an authenticated browser test. The subsequent verification commit also clears open dialogs/logs when roles change.
 
 ---
 

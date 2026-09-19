@@ -52,6 +52,7 @@ export default function Page() {
   const [loadComment, setLoadComment] = useState(''), [events, setEvents] = useState([]), [eventLoading, setEventLoading] = useState(false);
   const [page, setPage] = useState(0);
   const eventRequest = useRef(0);
+  const profileAccess = useRef(null);
   const generation = useRef(0), currentSession = useRef(null), busyRef = useRef(false);
   const staff = isStaff(profile), admin = isAdmin(profile);
 
@@ -66,6 +67,9 @@ export default function Page() {
       if (!nextSession?.user) { setProfile(null); setRows([]); setProfiles([]); setPhase('ready'); return; }
       const nextProfile = await ensureProfile(nextSession.user);
       if (ticket !== generation.current) return;
+      const nextAccess = `${nextProfile.user_id}:${nextProfile.role}:${nextProfile.approved}`;
+      if (profileAccess.current !== nextAccess) { setModal(null); setEvents([]); ++eventRequest.current; }
+      profileAccess.current = nextAccess;
       // Clear data immediately on revocation, before any further fetch.
       if (!nextProfile.approved) {
         setProfile(nextProfile); setRows([]); setProfiles([]); setView('tower'); setModal(null); setEvents([]); ++eventRequest.current; setPhase('ready'); return;
