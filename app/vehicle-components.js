@@ -1,6 +1,26 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { doorTypes, isAdmin, isStaff, canDeleteVehicle, formatDate, eventName, vehicleLabels } from '../lib/capacity.mjs';
+import { doorTypes, isAdmin, isStaff, canDeleteVehicle, canEditVehicle, dateOptionLabel, formatDate, eventName, vehicleLabels } from '../lib/capacity.mjs';
+
+export function CapacityFilters({ history, dates, date, onDate, status, onStatus, counts }) {
+  // Keep the selected day visible if the final vehicle is moved or deleted live.
+  const options = [...new Set([...dates, ...(date ? [date] : [])])].sort();
+  if (history) options.reverse();
+  function tabKeys(event) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 'Ledig' : event.key === 'End' ? 'Reservert' : status === 'Ledig' ? 'Reservert' : 'Ledig';
+    onStatus(next);
+    event.currentTarget.parentElement.querySelector(next === 'Ledig' ? '#tab-available' : '#tab-reserved')?.focus();
+  }
+  return <div className="capacity-filters">
+    {!history && <div className="status-tabs" role="tablist" aria-label="Bilstatus">
+      {[['Ledig', 'Ledige biler', 'available'], ['Reservert', 'Reserverte biler', 'reserved']].map(([value, label, id]) => <button key={value} id={`tab-${id}`} type="button" role="tab" aria-selected={status === value} aria-controls="vehicle-results" tabIndex={status === value ? 0 : -1} className={status === value ? `selected ${id}` : ''} onClick={() => onStatus(value)} onKeyDown={tabKeys}>{label}<span>{counts[value] || 0}</span></button>)}
+    </div>}
+    <label className="date-filter">Ledigdato<select value={date} onChange={event => onDate(event.target.value)}><option value="">Alle datoer</option>{options.map(day => <option value={day} key={day}>{dateOptionLabel(day)}</option>)}</select></label>
+    {date && <button type="button" className="clear-filter" onClick={() => onDate('')}>Vis alle datoer</button>}
+  </div>;
+}
 
 const Field = ({ label, children }) => <label>{label}{children}</label>;
 export function VehicleForm({ form, setForm, onSubmit, busy, submitLabel }) {
@@ -29,7 +49,7 @@ export function VehicleTable({ rows, profile, userId, busy, onAction, onEvents }
       <td className="reservation-cell">{row.status === 'Reservert' ? <><b>{row.reserved_by_name || row.reserved_by_email || 'Ukjent bruker'}</b>{row.reserved_by_email && <small>{row.reserved_by_email}</small>}<small>{formatDate(row.reserved_at).join(' kl. ')}</small><p className="multiline">{row.reservation_comment || 'Ingen lasskommentar registrert'}</p></> : <span className="muted">Ingen aktiv reservasjon</span>}</td>
       <td><div className="actions">
         {staff && !row.deleted_at && (!row.is_history || row.status === 'Reservert') && <button disabled={busy} className="book" onClick={() => onAction(row.status === 'Ledig' ? 'reserve' : 'release', row)}>{row.status === 'Ledig' ? 'Reserver' : 'Frigi'}</button>}
-        {admin && !row.deleted_at && <button disabled={busy} className="iconButton" onClick={() => onAction('edit', row)}>Rediger</button>}
+        {canEditVehicle(profile, userId, row) && <button disabled={busy} className="iconButton" onClick={() => onAction('edit', row)}>Rediger</button>}
         {canDeleteVehicle(profile, userId, row) && <button disabled={busy} className="iconButton delete-button" onClick={() => onAction('delete', row)}>Slett</button>}
         {admin && row.deleted_at && <button disabled={busy} className="iconButton" onClick={() => onAction('restore', row)}>Gjenopprett</button>}
         <button className="iconButton" disabled={busy} onClick={() => onEvents(row)}>Hendelser</button>

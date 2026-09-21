@@ -68,8 +68,25 @@ BEGIN
 
  PERFORM set_config('request.jwt.claim.sub',carrier_id::text,true);
  PERFORM set_config('request.jwt.claims',json_build_object('sub',carrier_id,'role','authenticated')::text,true);
- UPDATE public.capacity_vehicles SET deleted_at=now() WHERE id=vehicle_id;
- GET DIAGNOSTICS n=ROW_COUNT; IF n<>0 THEN RAISE EXCEPTION 'owner deleted reserved vehicle'; END IF;
+ BEGIN
+  UPDATE public.capacity_vehicles SET deleted_at=now() WHERE id=vehicle_id; RAISE EXCEPTION 'owner deleted reserved vehicle';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ UPDATE public.capacity_vehicles SET comment='Carrier corrected text',contact='Updated contact',phone='12345' WHERE id=vehicle_id;
+ GET DIAGNOSTICS n=ROW_COUNT; IF n<>1 THEN RAISE EXCEPTION 'carrier cannot edit own reserved vehicle'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.capacity_vehicles WHERE id=vehicle_id AND status='Reservert' AND reserved_by=dispatcher_id AND reserved_at=v.reserved_at AND reservation_comment='Kunde – Oslo til Bodø' AND comment='Carrier corrected text') THEN RAISE EXCEPTION 'carrier edit damaged reservation'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id=vehicle_id AND action='edited' AND actor_id=carrier_id AND after_data->>'comment'='Carrier corrected text') THEN RAISE EXCEPTION 'carrier edit not audited'; END IF;
+ BEGIN
+  UPDATE public.capacity_vehicles SET status='Ledig' WHERE id=vehicle_id; RAISE EXCEPTION 'carrier released reservation';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+  UPDATE public.capacity_vehicles SET reservation_comment='FORGED' WHERE id=vehicle_id; RAISE EXCEPTION 'carrier overwrote booking comment';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+  UPDATE public.capacity_vehicles SET reserved_by=carrier_id,reserved_by_name='FORGED' WHERE id=vehicle_id; RAISE EXCEPTION 'carrier changed booking actor';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+  UPDATE public.capacity_vehicles SET owner_user_id=other_id WHERE id=vehicle_id; RAISE EXCEPTION 'carrier changed owner';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id=vehicle_id AND action='reserved') THEN RAISE EXCEPTION 'owner cannot see own reservation'; END IF;
 
  PERFORM set_config('request.jwt.claim.sub',admin_id::text,true);
@@ -102,6 +119,8 @@ BEGIN
 
  PERFORM set_config('request.jwt.claim.sub',other_id::text,true);
  PERFORM set_config('request.jwt.claims',json_build_object('sub',other_id,'role','authenticated')::text,true);
+ UPDATE public.capacity_vehicles SET location='Narvik',door_type='Sideåpning',comment='Updated free vehicle' WHERE id=other_vehicle;
+ GET DIAGNOSTICS n=ROW_COUNT; IF n<>1 THEN RAISE EXCEPTION 'carrier cannot edit own free vehicle'; END IF;
  UPDATE public.capacity_vehicles SET deleted_at=now() WHERE id=other_vehicle;
  IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicle_overview WHERE id=other_vehicle AND is_history) THEN RAISE EXCEPTION 'carrier cannot delete own free vehicle'; END IF;
  UPDATE public.capacity_vehicles SET deleted_at=NULL WHERE id=other_vehicle;
@@ -116,6 +135,8 @@ BEGIN
  PERFORM set_config('request.jwt.claims',json_build_object('sub',carrier_id,'role','authenticated')::text,true);
  EXECUTE 'SET LOCAL ROLE authenticated';
  IF EXISTS(SELECT 1 FROM public.capacity_vehicle_overview) OR EXISTS(SELECT 1 FROM public.capacity_vehicle_events) THEN RAISE EXCEPTION 'revoked carrier still has data access'; END IF;
+ UPDATE public.capacity_vehicles SET comment='REVOKED' WHERE id=vehicle_id;
+ GET DIAGNOSTICS n=ROW_COUNT; IF n<>0 THEN RAISE EXCEPTION 'revoked carrier can edit'; END IF;
  EXECUTE 'SET LOCAL ROLE anon';
  BEGIN
   PERFORM * FROM public.capacity_vehicle_overview; RAISE EXCEPTION 'anonymous overview readable';

@@ -1,8 +1,8 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, vehiclePayload, vehicleChanges, vehicleForm, reservationComment, formatDate, authErrorFromUrl, userMessage, withTimeout } from '../lib/capacity.mjs';
-import { VehicleForm, VehicleTable, Modal, EventLog } from './vehicle-components';
+import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, canEditVehicle, filterVehicles, vehicleDates, vehiclePayload, vehicleChanges, vehicleForm, reservationComment, formatDate, authErrorFromUrl, userMessage, withTimeout } from '../lib/capacity.mjs';
+import { VehicleForm, VehicleTable, CapacityFilters, Modal, EventLog } from './vehicle-components';
 
 // Capture provider errors before the SDK consumes/cleans the callback URL.
 const initialAuthError = typeof window !== 'undefined' ? authErrorFromUrl(window.location.href) : '';
@@ -51,6 +51,7 @@ export default function Page() {
   const [modal, setModal] = useState(null), [editing, setEditing] = useState(blankVehicle);
   const [loadComment, setLoadComment] = useState(''), [events, setEvents] = useState([]), [eventLoading, setEventLoading] = useState(false);
   const [page, setPage] = useState(0);
+  const [status, setStatus] = useState('Ledig'), [dates, setDates] = useState({ tower: '', history: '' });
   const eventRequest = useRef(0);
   const profileAccess = useRef(null);
   const generation = useRef(0), currentSession = useRef(null), busyRef = useRef(false);
@@ -62,7 +63,7 @@ export default function Page() {
     currentSession.current = nextSession;
     setSession(nextSession);
     if (!silent) setPhase('loading');
-    if (changedUser) { setProfile(null); setRows([]); setProfiles([]); setView('tower'); setForm(blankVehicle); setModal(null); setEvents([]); ++eventRequest.current; }
+    if (changedUser) { setProfile(null); setRows([]); setProfiles([]); setView('tower'); setForm(blankVehicle); setModal(null); setEvents([]); setStatus('Ledig'); setDates({ tower: '', history: '' }); setQ(''); setPage(0); ++eventRequest.current; }
     try {
       if (!nextSession?.user) { setProfile(null); setRows([]); setProfiles([]); setPhase('ready'); return; }
       const nextProfile = await ensureProfile(nextSession.user);
@@ -142,13 +143,12 @@ export default function Page() {
   }, [session?.user?.id, admin, load]);
 
   const activeRows = useMemo(() => rows.filter(row => !row.is_history), [rows]);
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const entries = rows.filter(row => Boolean(row.is_history) === (view === 'history'));
-    if (view === 'history') entries.reverse();
-    return needle ? entries.filter(row => [row.carrier, row.contact, row.registration, row.location, row.vehicle_type, row.door_type, row.direction, row.reserved_by_name, row.reserved_by_email, row.reservation_comment, row.comment].some(v => String(v || '').toLowerCase().includes(needle))) : entries;
-  }, [rows, q, view]);
-  useEffect(() => setPage(0), [q, view]);
+  const history = view === 'history', selectedDate = dates[history ? 'history' : 'tower'];
+  const dateOptions = useMemo(() => vehicleDates(rows, history), [rows, history]);
+  const matchingRows = useMemo(() => filterVehicles(rows, { history, date: selectedDate, query: q }), [rows, q, history, selectedDate]);
+  const statusCounts = useMemo(() => ({ Ledig: matchingRows.filter(row => row.status === 'Ledig').length, Reservert: matchingRows.filter(row => row.status === 'Reservert').length }), [matchingRows]);
+  const filtered = useMemo(() => history ? matchingRows : matchingRows.filter(row => row.status === status), [matchingRows, history, status]);
+  useEffect(() => setPage(0), [q, view, selectedDate, status]);
   const lastPage = Math.max(0, Math.ceil(filtered.length / 50) - 1);
   const currentPage = Math.min(page, lastPage);
 
@@ -198,6 +198,7 @@ export default function Page() {
     });
   }
   function openModal(kind, row) {
+    if (kind === 'edit' && !canEditVehicle(profile, session?.user?.id, row)) return;
     setMessage(''); setLoadComment(''); setEditing(vehicleForm(row)); setModal({ kind, row });
   }
   async function reserve(row, comment = null) {
@@ -226,7 +227,7 @@ export default function Page() {
   }
   async function editVehicle(event) {
     event.preventDefault();
-    if (!admin) return;
+    if (!canEditVehicle(profile, session?.user?.id, modal?.row)) return;
     await action(async () => {
       const { data, error } = await withTimeout(supabase.from('capacity_vehicles').update(vehicleChanges(editing))
         .eq('id', modal.row.id).eq('updated_at', modal.row.updated_at).select('id').maybeSingle());
@@ -286,9 +287,12 @@ export default function Page() {
       <div className="hero"><div><span className="eyebrow">{view === 'history' ? 'TIDLIGERE KAPASITET' : live ? 'LIVE KAPASITET' : 'KAPASITET · OPPDATERES HVERT 20. SEKUND'}</span><h1>{view === 'history' ? 'Historikk' : staff ? 'Alle biler' : 'Mine biler'}</h1><p>{view === 'history' ? 'Passerte ledigdatoer og slettede linjer. Reservasjoner og hendelser bevares.' : 'Biler med ledigdato i dag eller senere. Passerte datoer flyttes automatisk til Historikk.'}</p></div><button className="primary" onClick={() => setView('register')}>+ Meld inn bil</button></div>
       {view === 'tower' && <div className="stats"><Stat t="LEDIGE BILER" n={available} s="Registrert tilgjengelig" /><Stat t="OSLO / GARDERMOEN" n={osloCount} s="Ledige biler i området" /><Stat t="TRANSPORTØRER" n={new Set(activeRows.map(row => row.carrier)).size} s="I din oversikt" /><Stat t="REGISTRERTE BILER" n={activeRows.length} s="Aktive poster" /></div>}
       <div className="panel"><div className="toolbar"><div><h2>{view === 'history' ? 'Tidligere innmeldte biler' : 'Kapasitetstorg'}</h2><p>Én linje per bil og ledigdato · Alle klokkeslett i norsk tid</p></div><input aria-label="Søk biler" placeholder="Søk reg.nr, transportør, booking eller dører …" value={q} onChange={e => setQ(e.target.value)} /><button disabled={busy} onClick={refresh}>Oppdater</button></div>
+        <CapacityFilters history={history} dates={dateOptions} date={selectedDate} onDate={date => setDates(old => ({ ...old, [history ? 'history' : 'tower']: date }))} status={status} onStatus={setStatus} counts={statusCounts} />
+        <div id="vehicle-results" role={history ? undefined : 'tabpanel'} aria-labelledby={history ? undefined : status === 'Ledig' ? 'tab-available' : 'tab-reserved'} tabIndex={0}>
         <VehicleTable rows={filtered.slice(currentPage * 50, (currentPage + 1) * 50)} profile={profile} userId={session.user.id} busy={busy} onAction={openModal} onEvents={showEvents} />
-        {!filtered.length && <div className="empty">{q ? 'Ingen biler passer søket.' : view === 'history' ? 'Ingen biler i historikken ennå.' : 'Ingen aktive biler. Tidligere ledigdatoer finner du under Historikk.'}</div>}
+        {!filtered.length && <div className="empty" role="status">{q || selectedDate ? 'Ingen biler passer valgt dato og søk i denne oversikten.' : history ? 'Ingen biler i historikken ennå.' : status === 'Ledig' ? 'Ingen ledige biler. Se også Reserverte biler eller Historikk.' : 'Ingen reserverte biler. Tidligere ledigdatoer finner du under Historikk.'}</div>}
         {filtered.length > 50 && <div className="pagination"><button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Forrige</button><span>Side {currentPage + 1} av {lastPage + 1} · {filtered.length} linjer</span><button disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>Neste</button></div>}
+        </div>
       </div>
     </section>}
     {view === 'register' && <section className="formpage"><div className="formcard"><span className="eyebrow">GNS CAPACITY</span><h1>Meld inn ledig bil</h1><p>Registrer én konkret bil og velg sideåpning eller bakdører. Dato og klokkeslett angis i norsk tid.</p>
@@ -301,7 +305,7 @@ export default function Page() {
         <button disabled={busy || p.user_id === session.user.id} className={p.approved ? 'dangerButton' : 'approveButton'} onClick={() => access(p.user_id, { approved: !p.approved })}>{p.approved ? 'Trekk tilgang' : 'Godkjenn'}</button></div>)}
     </div></section>}
     {modal && <Modal title={`${{ edit: 'Rediger bil', reserve: 'Reserver bil', release: 'Frigi bil', delete: 'Slett linje', restore: 'Gjenopprett linje', events: 'Hendelseslogg' }[modal.kind]} · ${modal.row.registration}`} busy={busy} onClose={() => { ++eventRequest.current; setModal(null); }} message={message}>
-      {modal.kind === 'edit' && admin && <VehicleForm form={editing} setForm={setEditing} onSubmit={editVehicle} busy={busy} submitLabel="Lagre endringer" />}
+      {modal.kind === 'edit' && canEditVehicle(profile, session.user.id, modal.row) && <>{modal.row.status === 'Reservert' && <p className="hint">Bilen er reservert. Du kan oppdatere bilopplysningene; reservasjonen og lasskommentaren beholdes.</p>}<VehicleForm form={editing} setForm={setEditing} onSubmit={editVehicle} busy={busy} submitLabel="Lagre endringer" /></>}
       {modal.kind === 'reserve' && staff && <form onSubmit={e => { e.preventDefault(); reserve(modal.row, loadComment); }}><p>{modal.row.carrier} · {modal.row.location} · {formatDate(modal.row.available_at).join(' kl. ')}</p><Field label="Hvilket lass bookes på bilen?"><textarea autoFocus maxLength={2000} value={loadComment} onChange={e => setLoadComment(e.target.value)} placeholder="F.eks. kunde, lastested, leveringssted og ordrenummer (valgfritt)" /></Field><p className="hint">Reservasjonen lagres med din bruker og tidspunkt. Kommentaren er synlig for GNS og bilens transportør.</p><button disabled={busy} className="primary full">{busy ? 'Reserverer …' : 'Bekreft reservasjon'}</button></form>}
       {modal.kind === 'release' && staff && <><p>Frigi {modal.row.registration}? Tidligere reservasjon, bruker og lasskommentar bevares i hendelsesloggen.</p><button className="primary full" disabled={busy} onClick={() => reserve(modal.row)}>Bekreft frigivelse</button></>}
       {modal.kind === 'delete' && <><p>Slette linjen for {modal.row.registration}? Den fjernes fra kapasitetstorget og merkes som slettet i Historikk. Admin kan gjenopprette linjen.</p><button className="dangerButton full" disabled={busy} onClick={() => remove(modal.row)}>Bekreft sletting</button></>}

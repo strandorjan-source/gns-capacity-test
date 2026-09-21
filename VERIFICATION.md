@@ -1,3 +1,20 @@
+# Capacity update — 21 September 2026
+
+Added separate Ledige biler / Reserverte biler tabs and a Ledigdato dropdown (plus Alle datoer). The date and search selection persist across tab switches; counts follow those filters. History has its own date selection. Date matching uses Europe/Oslo. The selected date remains visible if a live update removes the last matching vehicle.
+
+Approved carriers can now edit their own nondeleted vehicles, including reserved vehicles. The same form and optimistic updated_at conflict check used by admin are reused. Only vehicle details are submitted. The database still rejects changes to owner, reservation status, booking actor/time/comment and deletion of reserved vehicles; every accepted edit is audited.
+
+Validation:
+- 34 logic/rendered-component checks passed, including status/date/search combinations, Norwegian midnight, own/other/deleted/reserved editing controls and accessible filter markup.
+- Next.js production compilation passed locally using webpack with the unchanged installed dependency tree.
+- Migration `20260921134554_capacity_carrier_vehicle_edit` applied to GNS Cargo Ordre.
+- Transactional integration suite passed against the live database as authenticated admin, dispatcher, isolated carriers and revoked/pending users. Added reserved/free carrier edits, preserved booking data, audit attribution and denial of owner/booking tampering. All test fixtures rolled back.
+- No new Capacity security advisor findings. Existing shared order-system and global auth findings remain as documented below.
+
+The user explicitly authorized GitHub upload and production publication on 21 September 2026. The earlier automatic approval block is resolved. Production deployment and CI can be verified against this commit in GitHub/Vercel. The Cloud Browser is at the public login page without an authenticated account, so this session does not claim an authenticated production browser test.
+
+---
+
 # Capacity update — 19 September 2026
 
 Implemented admin vehicle editing, recoverable deletion/restore, automatic Norwegian-calendar-day history, explicit rear/side door types, reservation actor name/email/time and optional load comments, plus a protected event log. Same plate may be entered on different dates; a duplicate on the same Norwegian date is rejected. Existing door types remain unknown unless previously explicit. Existing reservations are imported with their recorded actor/time; earlier actions cannot be reconstructed.

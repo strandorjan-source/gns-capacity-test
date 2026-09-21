@@ -17,7 +17,7 @@ const {code}=transformSync(source,{filename:'vehicle-components.js',presets:[[re
 const cache=new URL('../node_modules/.cache/capacity/',import.meta.url);
 mkdirSync(cache,{recursive:true});
 writeFileSync(new URL('components.mjs',cache),code);
-const {VehicleTable,VehicleForm,EventLog}=await import(new URL('components.mjs',cache));
+const {VehicleTable,VehicleForm,EventLog,CapacityFilters}=await import(new URL('components.mjs',cache));
 const base={id:'fixture',owner_user_id:'owner',carrier:'Test',registration:'AB12345',available_at:'2026-09-21T07:00:00Z',status:'Ledig',door_type:'Bakdører',location:'Oslo',vehicle_type:'Termo'};
 const props={userId:'owner',busy:false,onAction(){},onEvents(){}};
 const table=(role,row=base)=>renderToStaticMarkup(h(VehicleTable,{...props,profile:{role,approved:true},rows:[row]}));
@@ -34,3 +34,19 @@ test('past rows cannot be reserved and deleted rows can be restored',()=>{
 });
 test('vehicle form requires a separate door choice',()=>{const html=renderToStaticMarkup(h(VehicleForm,{form:blankVehicle,setForm(){},onSubmit(){},busy:false,submitLabel:'Save'}));assert.ok(html.includes('Dører / åpning')&&html.includes('Sideåpning og bakdører')&&html.includes('<select required=""'));});
 test('release log keeps the previous load comment',()=>{const html=renderToStaticMarkup(h(EventLog,{events:[{id:1,action:'released',actor_name:'Staff',created_at:'2026-09-19T10:00:00Z',before_data:{reservation_comment:'Previous load'},after_data:{}}],loading:false}));assert.ok(html.includes('Frigitt')&&html.includes('Previous load'));});
+
+test('carrier edit control appears only on own nondeleted rows, including reservations',()=>{
+ assert.ok(table('carrier').includes('>Rediger<'));
+ assert.ok(table('carrier',{...base,status:'Reservert'}).includes('>Rediger<'));
+ assert.ok(!table('carrier',{...base,owner_user_id:'other'}).includes('>Rediger<'));
+ assert.ok(!table('carrier',{...base,deleted_at:'now'}).includes('>Rediger<'));
+});
+test('marketplace renders status tabs and a persistent selected date',()=>{
+ const html=renderToStaticMarkup(h(CapacityFilters,{history:false,dates:['2026-09-21'],date:'2026-09-22',status:'Reservert',counts:{Ledig:3,Reservert:2},onDate(){},onStatus(){}}));
+ assert.ok(html.includes('role="tablist"')&&html.includes('Ledige biler')&&html.includes('Reserverte biler'));
+ assert.match(html,/id="tab-reserved"[^>]*aria-selected="true"/);
+ assert.match(html,/<option value="2026-09-22" selected=""/);
+ assert.ok(html.includes('Alle datoer')&&html.includes('Vis alle datoer'));
+ const history=renderToStaticMarkup(h(CapacityFilters,{history:true,dates:[],date:'',onDate(){}}));
+ assert.ok(!history.includes('role="tab"')&&history.includes('Ledigdato'));
+});
