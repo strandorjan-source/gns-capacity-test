@@ -14,11 +14,11 @@ test('only approved staff have staff controls', () => { assert.equal(isStaff({ro
 test('reserved vehicles cannot be deleted by carriers', () => { const p={role:'carrier',approved:true}; const row={owner_user_id:'a',status:'Ledig',reserved_by:null,reserved_at:null}; assert.equal(canDeleteVehicle(p,'a',row),true); assert.equal(canDeleteVehicle(p,'b',row),false); assert.equal(canDeleteVehicle(p,'a',{...row,status:'Reservert'}),false); assert.equal(canDeleteVehicle({...p,approved:false},'a',row),false); });
 test('query and fragment OAuth failures are shown without leaking codes', () => { for (const suffix of ['?error=server_error&error_description=SECRET','#error=server_error&error_description=SECRET']) { const m=authErrorFromUrl(`https://gns-capacity-test.vercel.app/${suffix}`); assert.ok(m.includes('Microsoft')); assert.ok(!m.includes('SECRET')); } assert.equal(authErrorFromUrl('https://gns-capacity-test.vercel.app/'),''); });
 test('OAuth cancellation has actionable message', () => assert.match(authErrorFromUrl('https://example.test/?error=access_denied'), /avbrutt/));
-test('vehicle payload never grants reservations or substitutes owner', () => { const p=vehiclePayload({...blankVehicle,carrier:' Test ',door_type:'Bakdører',contact:'Name',phone:'123',registration:'AB 12345',date:'2026-09-18',time:'17:00',owner_user_id:'attacker',status:'Reservert'},'actual'); assert.equal(p.owner_user_id,'actual'); assert.equal(p.status,'Ledig'); assert.equal(p.reserved_by,null); assert.equal(p.registration,'AB12345'); assert.equal(p.carrier,'Test'); });
+test('vehicle payload never grants reservations or substitutes owner', () => { const p=vehiclePayload({...blankVehicle,carrier:' Test ',door_type:'Bakdører',loading_region:'Sør-Norge',contact:'Name',phone:'123',registration:'AB 12345',date:'2026-09-18',time:'17:00',owner_user_id:'attacker',status:'Reservert'},'actual'); assert.equal(p.owner_user_id,'actual'); assert.equal(p.status,'Ledig'); assert.equal(p.reserved_by,null); assert.equal(p.registration,'AB12345'); assert.equal(p.carrier,'Test'); });
 test('vehicle requires login and required fields', () => { assert.throws(() => vehiclePayload(blankVehicle,null)); assert.throws(() => vehiclePayload(blankVehicle,'a')); });
 test('timeout prevents endless loading', async () => { await assert.rejects(withTimeout(new Promise(()=>{}),5),/lang tid/); assert.equal(await withTimeout(Promise.resolve(42),50),42); });
 
-const validForm = { ...blankVehicle, carrier:'Transport', contact:'Kontakt', phone:'123', registration:'AB12345', date:'2026-09-21', time:'09:00', door_type:'Bakdører' };
+const validForm = { ...blankVehicle, carrier:'Transport', contact:'Kontakt', phone:'123', registration:'AB12345', date:'2026-09-21', time:'09:00', door_type:'Bakdører',loading_region:'Sør-Norge' };
 test('editing cannot reset a reservation or replace the owner', () => { const p=vehicleChanges({...validForm,owner_user_id:'other',status:'Ledig',reserved_by:null,reserved_at:null,deleted_at:'now'}); for(const k of ['owner_user_id','status','reserved_by','reserved_at','deleted_at']) assert.ok(!(k in p)); });
 test('door type is explicit and independent of vehicle type', () => { for(const door_type of ['Bakdører','Sideåpning','Sideåpning og bakdører']) assert.equal(vehicleChanges({...validForm,door_type}).door_type,door_type); for(const door_type of ['',null,'x']) assert.throws(()=>vehicleChanges({...validForm,door_type})); });
 test('same-day availability stays active until Norwegian midnight', () => { const row={available_at:'2026-09-19T07:00:00Z'}; assert.equal(isHistorical(row,osloDate('2026-09-19T21:59:59Z')),false); assert.equal(isHistorical(row,osloDate('2026-09-19T22:00:00Z')),true); assert.equal(isHistorical({...row,deleted_at:'2026-09-18T10:00:00Z'},'2026-09-18'),true); });
@@ -26,3 +26,13 @@ test('winter midnight and future availability use the Norwegian date', () => { a
 test('edit form roundtrip preserves Norwegian time and unknown legacy doors', () => { const row=vehiclePayload(validForm,'owner'); assert.equal(vehicleChanges(vehicleForm(row)).available_at,row.available_at); assert.equal(vehicleForm({...row,door_type:null}).door_type,''); });
 test('load comment preserves line breaks and limits length', () => { assert.equal(reservationComment('  Customer\nOslo–Bodø  '),'Customer\nOslo–Bodø'); assert.equal(reservationComment(' '),null); assert.throws(()=>reservationComment('x'.repeat(2001))); });
 test('deleted lines are not offered deletion twice', () => assert.equal(canDeleteVehicle({role:'admin',approved:true},'a',{deleted_at:'now'}),false));
+
+test('new equipment choices and loading region survive creation and edit', () => {
+ for (const door_type of ['Åpen semi', 'Flisbil', 'Maskinsemi']) {
+  const row=vehiclePayload({...validForm,door_type,loading_region:'Nord-Norge',direction:'Sør-Norge'},'owner');
+  const changes=vehicleChanges(vehicleForm(row));
+  assert.equal(changes.door_type,door_type); assert.equal(changes.loading_region,'Nord-Norge'); assert.equal(changes.direction,'Sør-Norge');
+ }
+ for (const loading_region of ['',null,'Ukjent']) assert.throws(()=>vehicleChanges({...validForm,loading_region}));
+ assert.equal(vehicleForm({...vehiclePayload(validForm,'owner'),loading_region:null}).loading_region,'');
+});

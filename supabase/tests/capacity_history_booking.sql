@@ -6,7 +6,7 @@ DECLARE
  admin_id uuid:=gen_random_uuid(); dispatcher_id uuid:=gen_random_uuid();
  carrier_id uuid:=gen_random_uuid(); other_id uuid:=gen_random_uuid(); pending_id uuid:=gen_random_uuid();
  vehicle_id uuid:=gen_random_uuid(); past_id uuid:=gen_random_uuid(); other_vehicle uuid:=gen_random_uuid();
- v public.capacity_vehicles; previous_time timestamptz; n int; ids uuid[];
+ equipment text; area text; v public.capacity_vehicles; previous_time timestamptz; n int; ids uuid[];
 BEGIN
  ids:=ARRAY[admin_id,dispatcher_id,carrier_id,other_id,pending_id];
  INSERT INTO auth.users(id,email,raw_user_meta_data) SELECT id,id::text||'@capacity-test.invalid','{}'::jsonb FROM unnest(ids) id;
@@ -38,11 +38,25 @@ BEGIN
   UPDATE public.capacity_vehicles SET status='Reservert' WHERE id=vehicle_id; RAISE EXCEPTION 'carrier reserved a vehicle';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 
+ -- New choices round-trip through the secured view and are audited.
+ FOREACH equipment IN ARRAY ARRAY['Åpen semi','Flisbil','Maskinsemi'] LOOP
+  FOREACH area IN ARRAY ARRAY['Nord-Norge','Midt-Norge','Sør-Norge','Utlandet'] LOOP
+   UPDATE public.capacity_vehicles SET door_type=equipment, loading_region=area WHERE id=vehicle_id;
+   IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicle_overview WHERE id=vehicle_id AND door_type=equipment AND loading_region=area) THEN RAISE EXCEPTION 'equipment/region not visible'; END IF;
+  END LOOP;
+ END LOOP;
+ IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id=vehicle_id AND after_data->>'loading_region'='Utlandet' AND after_data->>'door_type'='Maskinsemi' AND actor_id=carrier_id) THEN RAISE EXCEPTION 'region not audited'; END IF;
+ BEGIN
+  UPDATE public.capacity_vehicles SET loading_region='INVALID' WHERE id=vehicle_id; RAISE EXCEPTION 'invalid region accepted';
+ EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN
+  UPDATE public.capacity_vehicles SET door_type='INVALID' WHERE id=vehicle_id; RAISE EXCEPTION 'invalid equipment accepted';
+ EXCEPTION WHEN check_violation THEN NULL; END;
  PERFORM set_config('request.jwt.claim.sub',other_id::text,true);
  PERFORM set_config('request.jwt.claims',json_build_object('sub',other_id,'role','authenticated')::text,true);
  IF EXISTS (SELECT 1 FROM public.capacity_vehicle_overview WHERE id IN (vehicle_id,past_id)) THEN RAISE EXCEPTION 'carrier can see another carrier history'; END IF;
  IF EXISTS (SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id IN (vehicle_id,past_id)) THEN RAISE EXCEPTION 'carrier can see another carrier audit'; END IF;
- UPDATE public.capacity_vehicles SET location='WRONG' WHERE id=vehicle_id;
+ UPDATE public.capacity_vehicles SET loading_region='Nord-Norge' WHERE id=vehicle_id;
  GET DIAGNOSTICS n=ROW_COUNT; IF n<>0 THEN RAISE EXCEPTION 'carrier edited another owner'; END IF;
  INSERT INTO public.capacity_vehicles(id,owner_user_id,carrier,registration,location,available_at,door_type)
  VALUES(other_vehicle,other_id,'OTHER','QT'||substr(other_vehicle::text,1,8),'Bodø',now(),'Bakdører');
@@ -53,6 +67,9 @@ BEGIN
  IF v.reserved_by<>dispatcher_id OR v.reserved_by_name<>'Test Dispatcher' OR v.reserved_by_email<>dispatcher_id::text||'@capacity-test.invalid' OR v.reserved_at<now()-interval '1 minute' THEN RAISE EXCEPTION 'actor snapshot or timestamp is forgeable'; END IF;
  previous_time:=v.updated_at;
  IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id=vehicle_id AND action='reserved' AND actor_id=dispatcher_id AND after_data->>'reservation_comment'='Kunde – Oslo til Bodø') THEN RAISE EXCEPTION 'reservation audit missing'; END IF;
+ BEGIN
+  UPDATE public.capacity_vehicles SET loading_region='Nord-Norge' WHERE id=vehicle_id; RAISE EXCEPTION 'dispatcher edited region';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN
   UPDATE public.capacity_vehicles SET location='WRONG' WHERE id=vehicle_id; RAISE EXCEPTION 'dispatcher edited vehicle';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
@@ -71,9 +88,9 @@ BEGIN
  BEGIN
   UPDATE public.capacity_vehicles SET deleted_at=now() WHERE id=vehicle_id; RAISE EXCEPTION 'owner deleted reserved vehicle';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
- UPDATE public.capacity_vehicles SET comment='Carrier corrected text',contact='Updated contact',phone='12345' WHERE id=vehicle_id;
+ UPDATE public.capacity_vehicles SET comment='Carrier corrected text',loading_region='Nord-Norge',door_type='Maskinsemi',contact='Updated contact',phone='12345' WHERE id=vehicle_id;
  GET DIAGNOSTICS n=ROW_COUNT; IF n<>1 THEN RAISE EXCEPTION 'carrier cannot edit own reserved vehicle'; END IF;
- IF NOT EXISTS(SELECT 1 FROM public.capacity_vehicles WHERE id=vehicle_id AND status='Reservert' AND reserved_by=dispatcher_id AND reserved_at=v.reserved_at AND reservation_comment='Kunde – Oslo til Bodø' AND comment='Carrier corrected text') THEN RAISE EXCEPTION 'carrier edit damaged reservation'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.capacity_vehicles WHERE id=vehicle_id AND status='Reservert' AND reserved_by=dispatcher_id AND reserved_at=v.reserved_at AND reservation_comment='Kunde – Oslo til Bodø' AND comment='Carrier corrected text' AND loading_region='Nord-Norge' AND door_type='Maskinsemi') THEN RAISE EXCEPTION 'carrier edit damaged reservation'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id=vehicle_id AND action='edited' AND actor_id=carrier_id AND after_data->>'comment'='Carrier corrected text') THEN RAISE EXCEPTION 'carrier edit not audited'; END IF;
  BEGIN
   UPDATE public.capacity_vehicles SET status='Ledig' WHERE id=vehicle_id; RAISE EXCEPTION 'carrier released reservation';
@@ -91,7 +108,7 @@ BEGIN
 
  PERFORM set_config('request.jwt.claim.sub',admin_id::text,true);
  PERFORM set_config('request.jwt.claims',json_build_object('sub',admin_id,'role','authenticated')::text,true);
- UPDATE public.capacity_vehicles SET location='Trondheim',door_type='Sideåpning og bakdører' WHERE id=vehicle_id;
+ UPDATE public.capacity_vehicles SET location='Trondheim',loading_region='Midt-Norge',door_type='Sideåpning og bakdører' WHERE id=vehicle_id;
  IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicles WHERE id=vehicle_id AND status='Reservert' AND reserved_by=dispatcher_id AND reserved_at=v.reserved_at AND reservation_comment='Kunde – Oslo til Bodø') THEN RAISE EXCEPTION 'admin edit reset reservation'; END IF;
  IF NOT EXISTS (SELECT 1 FROM public.capacity_vehicle_events WHERE capacity_vehicle_events.vehicle_id=vehicle_id AND action='edited' AND before_data->>'location'='Oslo' AND after_data->>'location'='Trondheim') THEN RAISE EXCEPTION 'edit not audited'; END IF;
  UPDATE public.capacity_vehicles SET status='Ledig' WHERE id=vehicle_id AND updated_at=previous_time;
@@ -148,4 +165,4 @@ BEGIN
 END;
 $$;
 ROLLBACK;
-SELECT 'PASS: history, door types, actor attribution, audit, edit, soft delete/restore, conflicts and all roles; fixtures rolled back' AS result;
+SELECT 'PASS: loading regions, equipment, history, door types, actor attribution, audit, edit, soft delete/restore, conflicts and all roles; fixtures rolled back' AS result;

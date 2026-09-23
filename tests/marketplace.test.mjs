@@ -38,3 +38,21 @@ test('carrier can edit own free or reserved vehicle, but not deleted or other-ow
  assert.equal(canEditVehicle({role:'dispatcher',approved:true},'a',row),false);
  assert.equal(canEditVehicle({role:'admin',approved:true},'b',row),true);
 });
+
+test('region filters the loading location independently of direction, date and status',()=>{
+ const vehicles=[
+  {id:'north',loading_region:'Nord-Norge',direction:'Sør-Norge',status:'Ledig',available_at:'2026-09-23T08:00:00Z'},
+  {id:'south',loading_region:'Sør-Norge',direction:'Nord-Norge',status:'Ledig',available_at:'2026-09-23T08:00:00Z'},
+  {id:'reserved',loading_region:'Nord-Norge',status:'Reservert',available_at:'2026-09-23T08:00:00Z'},
+  {id:'unknown',loading_region:null,status:'Ledig',available_at:'2026-09-24T08:00:00Z'},
+  {id:'past',loading_region:'Nord-Norge',status:'Ledig',available_at:'2026-09-20T08:00:00Z',is_history:true}
+ ];
+ const filtered=options=>filterVehicles(vehicles,options).map(v=>v.id);
+ assert.deepEqual(filtered({region:'Nord-Norge',date:'2026-09-23',status:'Ledig'}),['north']);
+ assert.deepEqual(filtered({region:'Nord-Norge',date:'2026-09-23',status:'Reservert'}),['reserved']);
+ assert.deepEqual(filtered({region:'Sør-Norge'}),['south']);
+ assert.deepEqual(filtered({region:'Nord-Norge',history:true}),['past']);
+ assert.deepEqual(filtered({region:'unknown'}),['unknown']);
+ assert.deepEqual(filtered({region:'Midt-Norge'}),[]);
+ assert.deepEqual(filtered({region:'',status:'Ledig'}),['north','south','unknown']);
+});

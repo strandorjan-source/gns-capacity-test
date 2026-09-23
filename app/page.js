@@ -52,6 +52,7 @@ export default function Page() {
   const [loadComment, setLoadComment] = useState(''), [events, setEvents] = useState([]), [eventLoading, setEventLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [status, setStatus] = useState('Ledig'), [dates, setDates] = useState({ tower: '', history: '' });
+  const [region, setRegion] = useState('');
   const eventRequest = useRef(0);
   const profileAccess = useRef(null);
   const generation = useRef(0), currentSession = useRef(null), busyRef = useRef(false);
@@ -63,7 +64,7 @@ export default function Page() {
     currentSession.current = nextSession;
     setSession(nextSession);
     if (!silent) setPhase('loading');
-    if (changedUser) { setProfile(null); setRows([]); setProfiles([]); setView('tower'); setForm(blankVehicle); setModal(null); setEvents([]); setStatus('Ledig'); setDates({ tower: '', history: '' }); setQ(''); setPage(0); ++eventRequest.current; }
+    if (changedUser) { setProfile(null); setRows([]); setProfiles([]); setView('tower'); setForm(blankVehicle); setModal(null); setEvents([]); setStatus('Ledig'); setRegion(''); setDates({ tower: '', history: '' }); setQ(''); setPage(0); ++eventRequest.current; }
     try {
       if (!nextSession?.user) { setProfile(null); setRows([]); setProfiles([]); setPhase('ready'); return; }
       const nextProfile = await ensureProfile(nextSession.user);
@@ -145,10 +146,10 @@ export default function Page() {
   const activeRows = useMemo(() => rows.filter(row => !row.is_history), [rows]);
   const history = view === 'history', selectedDate = dates[history ? 'history' : 'tower'];
   const dateOptions = useMemo(() => vehicleDates(rows, history), [rows, history]);
-  const matchingRows = useMemo(() => filterVehicles(rows, { history, date: selectedDate, query: q }), [rows, q, history, selectedDate]);
+  const matchingRows = useMemo(() => filterVehicles(rows, { history, date: selectedDate, query: q, region }), [rows, q, history, selectedDate, region]);
   const statusCounts = useMemo(() => ({ Ledig: matchingRows.filter(row => row.status === 'Ledig').length, Reservert: matchingRows.filter(row => row.status === 'Reservert').length }), [matchingRows]);
   const filtered = useMemo(() => history ? matchingRows : matchingRows.filter(row => row.status === status), [matchingRows, history, status]);
-  useEffect(() => setPage(0), [q, view, selectedDate, status]);
+  useEffect(() => setPage(0), [q, view, selectedDate, status, region]);
   const lastPage = Math.max(0, Math.ceil(filtered.length / 50) - 1);
   const currentPage = Math.min(page, lastPage);
 
@@ -286,16 +287,16 @@ export default function Page() {
     {(view === 'tower' || view === 'history') && <section className="wrap">
       <div className="hero"><div><span className="eyebrow">{view === 'history' ? 'TIDLIGERE KAPASITET' : live ? 'LIVE KAPASITET' : 'KAPASITET · OPPDATERES HVERT 20. SEKUND'}</span><h1>{view === 'history' ? 'Historikk' : staff ? 'Alle biler' : 'Mine biler'}</h1><p>{view === 'history' ? 'Passerte ledigdatoer og slettede linjer. Reservasjoner og hendelser bevares.' : 'Biler med ledigdato i dag eller senere. Passerte datoer flyttes automatisk til Historikk.'}</p></div><button className="primary" onClick={() => setView('register')}>+ Meld inn bil</button></div>
       {view === 'tower' && <div className="stats"><Stat t="LEDIGE BILER" n={available} s="Registrert tilgjengelig" /><Stat t="OSLO / GARDERMOEN" n={osloCount} s="Ledige biler i området" /><Stat t="TRANSPORTØRER" n={new Set(activeRows.map(row => row.carrier)).size} s="I din oversikt" /><Stat t="REGISTRERTE BILER" n={activeRows.length} s="Aktive poster" /></div>}
-      <div className="panel"><div className="toolbar"><div><h2>{view === 'history' ? 'Tidligere innmeldte biler' : 'Kapasitetstorg'}</h2><p>Én linje per bil og ledigdato · Alle klokkeslett i norsk tid</p></div><input aria-label="Søk biler" placeholder="Søk reg.nr, transportør, booking eller dører …" value={q} onChange={e => setQ(e.target.value)} /><button disabled={busy} onClick={refresh}>Oppdater</button></div>
-        <CapacityFilters history={history} dates={dateOptions} date={selectedDate} onDate={date => setDates(old => ({ ...old, [history ? 'history' : 'tower']: date }))} status={status} onStatus={setStatus} counts={statusCounts} />
+      <div className="panel"><div className="toolbar"><div><h2>{view === 'history' ? 'Tidligere innmeldte biler' : 'Kapasitetstorg'}</h2><p>Én linje per bil og ledigdato · Alle klokkeslett i norsk tid</p></div><input aria-label="Søk biler" placeholder="Søk reg.nr, transportør, booking, tilvalg eller landsdel …" value={q} onChange={e => setQ(e.target.value)} /><button disabled={busy} onClick={refresh}>Oppdater</button></div>
+        <CapacityFilters history={history} dates={dateOptions} date={selectedDate} onDate={date => setDates(old => ({ ...old, [history ? 'history' : 'tower']: date }))} status={status} onStatus={setStatus} counts={statusCounts} region={region} onRegion={setRegion} />
         <div id="vehicle-results" role={history ? undefined : 'tabpanel'} aria-labelledby={history ? undefined : status === 'Ledig' ? 'tab-available' : 'tab-reserved'} tabIndex={0}>
         <VehicleTable rows={filtered.slice(currentPage * 50, (currentPage + 1) * 50)} profile={profile} userId={session.user.id} busy={busy} onAction={openModal} onEvents={showEvents} />
-        {!filtered.length && <div className="empty" role="status">{q || selectedDate ? 'Ingen biler passer valgt dato og søk i denne oversikten.' : history ? 'Ingen biler i historikken ennå.' : status === 'Ledig' ? 'Ingen ledige biler. Se også Reserverte biler eller Historikk.' : 'Ingen reserverte biler. Tidligere ledigdatoer finner du under Historikk.'}</div>}
+        {!filtered.length && <div className="empty" role="status">{q || selectedDate || region ? 'Ingen biler passer valgte filtre og søk i denne oversikten.' : history ? 'Ingen biler i historikken ennå.' : status === 'Ledig' ? 'Ingen ledige biler. Se også Reserverte biler eller Historikk.' : 'Ingen reserverte biler. Tidligere ledigdatoer finner du under Historikk.'}</div>}
         {filtered.length > 50 && <div className="pagination"><button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Forrige</button><span>Side {currentPage + 1} av {lastPage + 1} · {filtered.length} linjer</span><button disabled={currentPage === lastPage} onClick={() => setPage(currentPage + 1)}>Neste</button></div>}
         </div>
       </div>
     </section>}
-    {view === 'register' && <section className="formpage"><div className="formcard"><span className="eyebrow">GNS CAPACITY</span><h1>Meld inn ledig bil</h1><p>Registrer én konkret bil og velg sideåpning eller bakdører. Dato og klokkeslett angis i norsk tid.</p>
+    {view === 'register' && <section className="formpage"><div className="formcard"><span className="eyebrow">GNS CAPACITY</span><h1>Meld inn ledig bil</h1><p>Registrer én konkret bil, velg dører / tilvalg og landsdelen der bilen er klar for lasting. Dato og klokkeslett angis i norsk tid.</p>
       <VehicleForm form={form} setForm={setForm} onSubmit={submit} busy={busy} submitLabel="Meld inn ledig bil" />
     </div></section>}
     {view === 'thanks' && <section className="thanks"><div><div className="check">✓</div><h1>Bilen er registrert</h1><p>Bilen er lagret. Dagens og fremtidige ledigdatoer vises i Control Tower. Passerte datoer vises i Historikk.</p><button className="primary" onClick={() => setView('register')}>Registrer en bil til</button><button className="link" onClick={() => { setView('tower'); refresh(); }}>Se Control Tower</button></div></section>}
