@@ -17,7 +17,7 @@ const {code}=transformSync(source,{filename:'vehicle-components.js',presets:[[re
 const cache=new URL('../node_modules/.cache/capacity/',import.meta.url);
 mkdirSync(cache,{recursive:true});
 writeFileSync(new URL('components.mjs',cache),code);
-const {VehicleTable,VehicleForm,EventLog,CapacityFilters}=await import(new URL('components.mjs',cache));
+const {VehicleTable,VehicleForm,EventLog,CapacityFilters,VehicleTypeTabs}=await import(new URL('components.mjs',cache));
 const base={id:'fixture',owner_user_id:'owner',carrier:'Test',registration:'AB12345',available_at:'2026-09-21T07:00:00Z',status:'Ledig',door_type:'Bakdører',location:'Oslo',vehicle_type:'Termo'};
 const props={userId:'owner',busy:false,onAction(){},onEvents(){}};
 const table=(role,row=base)=>renderToStaticMarkup(h(VehicleTable,{...props,profile:{role,approved:true},rows:[row]}));
@@ -49,4 +49,33 @@ test('marketplace renders status tabs and a persistent selected date',()=>{
  assert.ok(html.includes('Alle datoer')&&html.includes('Vis alle datoer')); assert.ok(html.includes('Klar for lasting i')&&html.includes('Alle landsdeler')&&html.includes('Ikke oppgitt')); assert.match(html, /<option selected="">Nord-Norge<\/option>/);
  const history=renderToStaticMarkup(h(CapacityFilters,{history:true,dates:[],date:'',onDate(){}}));
  assert.ok(!history.includes('role="tab"')&&history.includes('Ledigdato'));
+});
+
+
+test('type tabs identify the selected category, count and result panel',()=>{
+ const html=renderToStaticMarkup(h(VehicleTypeTabs,{selected:'machine',counts:{all:7,machine:2},onSelect(){}}));
+ for(const text of ['Alle biltyper','Termo','Express','Standard','Bakdører','Sideåpning','Åpen semi','Flisbil','Maskinsemi']) assert.ok(html.includes(text));
+ assert.match(html,/id="type-tab-machine"[^>]*aria-selected="true"[^>]*aria-controls="vehicle-type-results"[^>]*tabindex="0"/);
+ assert.ok(html.includes('Maskinsemi<span>2</span>'));
+ assert.equal((html.match(/tabindex="0"/g)||[]).length,1);
+});
+test('type tabs support click, arrow wrap and Home/End navigation',()=>{
+ let selected,focused;
+ const tabs=VehicleTypeTabs({selected:'machine',counts:{},onSelect(value){selected=value;}}).props.children;
+ tabs.find(tab=>tab.props.id==='type-tab-open').props.onClick(); assert.equal(selected,'open');
+ const active=tabs.find(tab=>tab.props.id==='type-tab-machine');
+ const key=key=>active.props.onKeyDown({key,preventDefault(){},currentTarget:{parentElement:{querySelector(selector){return {focus(){focused=selector;}};}}}});
+ key('ArrowRight'); assert.equal(selected,'all'); assert.equal(focused,'#type-tab-all');
+ key('ArrowLeft'); assert.equal(selected,'chips');
+ key('Home'); assert.equal(selected,'all'); key('End'); assert.equal(selected,'machine');
+});
+
+
+test('carrier has an all-vehicles summary with available and reserved counts',()=>{
+ const props={history:false,dates:[],date:'',region:'',onDate(){},onRegion(){},onStatus(){},status:'Alle',counts:{Alle:5,Ledig:2,Reservert:3},ownOverview:true};
+ const html=renderToStaticMarkup(h(CapacityFilters,props));
+ assert.match(html,/id="tab-mine"[^>]*aria-selected="true"/);
+ assert.ok(html.includes('Alle mine biler<span>5</span>')&&html.includes('Reserverte biler<span>3</span>'));
+ const staff=renderToStaticMarkup(h(CapacityFilters,{...props,ownOverview:false,status:'Ledig'}));
+ assert.ok(!staff.includes('Alle mine biler'));
 });
