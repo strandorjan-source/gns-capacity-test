@@ -32,7 +32,7 @@ test('past rows cannot be reserved and deleted rows can be restored',()=>{
  const history=table('admin',{...base,is_history:true});assert.ok(history.includes('Passert dato')&&!history.includes('>Reserver<'));
  const deleted=table('admin',{...base,is_history:true,deleted_at:'2026-09-19T10:00:00Z'});assert.ok(deleted.includes('Gjenopprett')&&!deleted.includes('>Slett<')&&!deleted.includes('>Rediger<'));
 });
-test('vehicle form requires a separate door choice',()=>{const html=renderToStaticMarkup(h(VehicleForm,{form:blankVehicle,setForm(){},onSubmit(){},busy:false,submitLabel:'Save'}));assert.ok(html.includes('Dører / åpning')&&html.includes('Sideåpning og bakdører')&&html.includes('<select required=""'));});
+test('vehicle form offers equipment choices and requires the loading region',()=>{const html=renderToStaticMarkup(h(VehicleForm,{form:{...blankVehicle,door_type:'Maskinsemi',loading_region:'Nord-Norge'},setForm(){},onSubmit(){},busy:false,submitLabel:'Save'}));assert.ok(html.includes('Dører / tilvalg')&&html.includes('Sideåpning og bakdører')&&html.includes('<select required=""')); for (const label of ['Åpen semi','Flisbil','Maskinsemi','Landsdel klar for lasting','Midt-Norge','Sør-Norge','Utlandet']) assert.ok(html.includes(label),label); assert.match(html, /<option selected="">Maskinsemi<\/option>/); assert.match(html, /<option selected="">Nord-Norge<\/option>/);});
 test('release log keeps the previous load comment',()=>{const html=renderToStaticMarkup(h(EventLog,{events:[{id:1,action:'released',actor_name:'Staff',created_at:'2026-09-19T10:00:00Z',before_data:{reservation_comment:'Previous load'},after_data:{}}],loading:false}));assert.ok(html.includes('Frigitt')&&html.includes('Previous load'));});
 
 test('carrier edit control appears only on own nondeleted rows, including reservations',()=>{
@@ -42,11 +42,11 @@ test('carrier edit control appears only on own nondeleted rows, including reserv
  assert.ok(!table('carrier',{...base,deleted_at:'now'}).includes('>Rediger<'));
 });
 test('marketplace renders status tabs and a persistent selected date',()=>{
- const html=renderToStaticMarkup(h(CapacityFilters,{history:false,dates:['2026-09-21'],date:'2026-09-22',status:'Reservert',counts:{Ledig:3,Reservert:2},onDate(){},onStatus(){}}));
+ const html=renderToStaticMarkup(h(CapacityFilters,{history:false,dates:['2026-09-21'],date:'2026-09-22',status:'Reservert',counts:{Ledig:3,Reservert:2},region:'Nord-Norge',onRegion(){},onDate(){},onStatus(){}}));
  assert.ok(html.includes('role="tablist"')&&html.includes('Ledige biler')&&html.includes('Reserverte biler'));
  assert.match(html,/id="tab-reserved"[^>]*aria-selected="true"/);
  assert.match(html,/<option value="2026-09-22" selected=""/);
- assert.ok(html.includes('Alle datoer')&&html.includes('Vis alle datoer'));
+ assert.ok(html.includes('Alle datoer')&&html.includes('Vis alle datoer')); assert.ok(html.includes('Klar for lasting i')&&html.includes('Alle landsdeler')&&html.includes('Ikke oppgitt')); assert.match(html, /<option selected="">Nord-Norge<\/option>/);
  const history=renderToStaticMarkup(h(CapacityFilters,{history:true,dates:[],date:'',onDate(){}}));
  assert.ok(!history.includes('role="tab"')&&history.includes('Ledigdato'));
 });

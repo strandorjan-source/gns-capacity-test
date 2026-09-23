@@ -1,3 +1,19 @@
+# Capacity update — 23 September 2026
+
+Added Åpen semi, Flisbil and Maskinsemi to the existing Dører / tilvalg choice in registration and editing. Added a required loading-region field in the form, separate from desired direction: Nord-Norge (Nordland, Troms, Finnmark), Midt-Norge (Trøndelag), Sør-Norge (remaining Norway) and Utlandet.
+
+The marketplace and history can filter by loading region, including Ikke oppgitt for older rows. Region combines with date, search and availability tabs; status counts follow the filters and pagination resets. The selected region is visible per vehicle and changes appear in the existing audit log. Existing rows retain NULL region until explicitly edited; no location guesses or booking rewrites.
+
+Validation before publication:
+- 36 logic/rendered-component checks passed, including all new choices, create/edit round trips, required region validation and combined filters independent of desired direction.
+- Next.js production compilation passed locally with webpack and unchanged dependencies.
+- Migration `20260923134149_capacity_equipment_loading_regions` applied successfully. Expanded equipment constraint, added region column, appended it to the security-invoker view and extended the existing dispatcher edit guard.
+- Transactional database integration suite passed across authenticated roles, including all 12 equipment/region combinations, view visibility, carrier editing of a reserved vehicle without changing its booking, audit entries and denial of dispatcher/other-owner region changes. All fixtures rolled back.
+- No new Capacity security-advisor findings; the previously documented order-system and global auth findings are unchanged.
+- Authenticated production browser interactions are not yet verified in this session. Publication verification follows in GitHub Actions and the production revision endpoint.
+
+---
+
 # Capacity update — 21 September 2026
 
 Added separate Ledige biler / Reserverte biler tabs and a Ledigdato dropdown (plus Alle datoer). The date and search selection persist across tab switches; counts follow those filters. History has its own date selection. Date matching uses Europe/Oslo. The selected date remains visible if a live update removes the last matching vehicle.
