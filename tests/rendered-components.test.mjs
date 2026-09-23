@@ -54,7 +54,8 @@ test('marketplace renders status tabs and a persistent selected date',()=>{
 
 test('type tabs identify the selected category, count and result panel',()=>{
  const html=renderToStaticMarkup(h(VehicleTypeTabs,{selected:'machine',counts:{all:7,machine:2},onSelect(){}}));
- for(const text of ['Alle biltyper','Termo','Express','Standard','Bakdører','Sideåpning','Åpen semi','Flisbil','Maskinsemi']) assert.ok(html.includes(text));
+ for(const text of ['Alle biltyper','Bakdører','Sideåpning','Åpen semi','Flisbil','Maskinsemi']) assert.ok(html.includes(text));
+ for(const text of ['Termo','Express','Standard']) assert.ok(!html.includes(text));
  assert.match(html,/id="type-tab-machine"[^>]*aria-selected="true"[^>]*aria-controls="vehicle-type-results"[^>]*tabindex="0"/);
  assert.ok(html.includes('Maskinsemi<span>2</span>'));
  assert.equal((html.match(/tabindex="0"/g)||[]).length,1);
