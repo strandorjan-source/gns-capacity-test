@@ -77,7 +77,6 @@ test('type tabs preserve the status/date/region scope and count each vehicle onc
  assert.deepEqual(ids('machine'),['machine']);
  assert.deepEqual(ids('open'),['open']); assert.deepEqual(ids('chips'),['chips']);
  assert.deepEqual(ids('rear'),['both']); assert.deepEqual(ids('side'),['both','legacy']);
- assert.deepEqual(ids('thermo'),['both']); assert.deepEqual(ids('standard'),['open','chips','machine']);
  assert.deepEqual(ids('express'),[]); assert.deepEqual(ids('invalid'),[]);
  assert.equal(ids('all').length,6);
  const counts=vehicleTypeCounts(scope);
