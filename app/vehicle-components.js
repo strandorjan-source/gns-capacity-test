@@ -1,25 +1,46 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { doorTypes, loadingRegions, isAdmin, isStaff, canDeleteVehicle, canEditVehicle, dateOptionLabel, formatDate, eventName, vehicleLabels } from '../lib/capacity.mjs';
+import { doorTypes, loadingRegions, vehicleTypeTabs, isAdmin, isStaff, canDeleteVehicle, canEditVehicle, dateOptionLabel, formatDate, eventName, vehicleLabels } from '../lib/capacity.mjs';
 
-export function CapacityFilters({ history, dates, date, onDate, status, onStatus, counts, region = '', onRegion }) {
+export function CapacityFilters({ history, dates, date, onDate, status, onStatus, counts, region = '', onRegion, ownOverview = false }) {
   // Keep the selected day visible if the final vehicle is moved or deleted live.
   const options = [...new Set([...dates, ...(date ? [date] : [])])].sort();
   if (history) options.reverse();
+  const tabs = [...(ownOverview ? [['Alle', 'Alle mine biler', 'mine']] : []), ['Ledig', 'Ledige biler', 'available'], ['Reservert', 'Reserverte biler', 'reserved']];
   function tabKeys(event) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const next = event.key === 'Home' ? 'Ledig' : event.key === 'End' ? 'Reservert' : status === 'Ledig' ? 'Reservert' : 'Ledig';
-    onStatus(next);
-    event.currentTarget.parentElement.querySelector(next === 'Ledig' ? '#tab-available' : '#tab-reserved')?.focus();
+    const current = tabs.findIndex(([value]) => value === status);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    onStatus(tabs[next][0]);
+    event.currentTarget.parentElement.querySelector(`#tab-${tabs[next][2]}`)?.focus();
   }
   return <div className="capacity-filters">
     {!history && <div className="status-tabs" role="tablist" aria-label="Bilstatus">
-      {[['Ledig', 'Ledige biler', 'available'], ['Reservert', 'Reserverte biler', 'reserved']].map(([value, label, id]) => <button key={value} id={`tab-${id}`} type="button" role="tab" aria-selected={status === value} aria-controls="vehicle-results" tabIndex={status === value ? 0 : -1} className={status === value ? `selected ${id}` : ''} onClick={() => onStatus(value)} onKeyDown={tabKeys}>{label}<span>{counts[value] || 0}</span></button>)}
+      {tabs.map(([value, label, id]) => <button key={value} id={`tab-${id}`} type="button" role="tab" aria-selected={status === value} aria-controls="vehicle-results" tabIndex={status === value ? 0 : -1} className={status === value ? `selected ${id}` : ''} onClick={() => onStatus(value)} onKeyDown={tabKeys}>{label}<span>{counts[value] || 0}</span></button>)}
     </div>}
     <label className="date-filter region-filter">Klar for lasting i<select value={region} onChange={event => onRegion(event.target.value)}><option value="">Alle landsdeler</option>{loadingRegions.map(value => <option key={value}>{value}</option>)}<option value="unknown">Ikke oppgitt</option></select></label>
     <label className="date-filter">Ledigdato<select value={date} onChange={event => onDate(event.target.value)}><option value="">Alle datoer</option>{options.map(day => <option value={day} key={day}>{dateOptionLabel(day)}</option>)}</select></label>
     {date && <button type="button" className="clear-filter" onClick={() => onDate('')}>Vis alle datoer</button>}
+  </div>;
+}
+
+export function VehicleTypeTabs({ selected, onSelect, counts }) {
+  function tabKeys(event) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const current = vehicleTypeTabs.findIndex(tab => tab.id === selected);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? vehicleTypeTabs.length - 1
+      : (current + (event.key === 'ArrowRight' ? 1 : -1) + vehicleTypeTabs.length) % vehicleTypeTabs.length;
+    onSelect(vehicleTypeTabs[next].id);
+    event.currentTarget.parentElement.querySelector(`#type-tab-${vehicleTypeTabs[next].id}`)?.focus();
+  }
+  return <div className="vehicle-type-tabs" role="tablist" aria-label="Biltype og tilvalg">
+    {vehicleTypeTabs.map(tab => <button key={tab.id} id={`type-tab-${tab.id}`} type="button" role="tab"
+      aria-selected={selected === tab.id} aria-controls="vehicle-type-results" tabIndex={selected === tab.id ? 0 : -1}
+      className={selected === tab.id ? 'selected' : ''} onClick={() => onSelect(tab.id)} onKeyDown={tabKeys}>
+      {tab.label}<span>{counts[tab.id] || 0}</span>
+    </button>)}
   </div>;
 }
 

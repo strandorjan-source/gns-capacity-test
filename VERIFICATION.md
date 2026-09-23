@@ -1,3 +1,20 @@
+# Capacity type tabs and carrier overview — 23 September 2026
+
+Added Biltype og tilvalg tabs beneath the status overview: all types, Termo, Express, Standard, Bakdører, Sideåpning, Åpen semi, Flisbil and Maskinsemi. Counts and results follow the selected status, date, loading region and search. Clicking either main status overview resets the type selection. Combined side/rear vehicles appear in both corresponding tabs, counted only once in the overall summary. Mobile type tabs scroll horizontally; arrow keys and Home/End move focus and selection.
+
+Carriers now enter Mine biler with Alle mine biler selected, showing both available and reserved own vehicles. Successful registration returns directly to this overview and clears filters so the new vehicle is visible. The existing row permissions still restrict carriers to their own registrations.
+
+Migration `20260923140015_capacity_carrier_reserved_retention` keeps a carrier's reserved vehicles active through the third full Europe/Oslo calendar day after loading, moving them to history on day four. Monday loading stays visible through Thursday. Staff market dates, deleted rows and unreserved historical rows retain existing behavior. The security-invoker view derives the viewer role from the database; no rows or booking records are rewritten.
+
+Validation:
+- 40 Node logic/component checks passed, including type combinations, scoped counts, legacy rows, selected tabs, keyboard navigation and carrier all-vehicle overview.
+- Production webpack compilation passed with unchanged dependencies.
+- New transactional retention suite passed: loading day through day three, fourth-day history, own-row isolation, staff dates, deletion and booking attribution. Existing full reservation/history/permission integration suite also passed. All fixtures rolled back.
+- No new Capacity security advisor findings; existing shared order-system and global auth warnings are unchanged.
+- Authenticated production browser interactions are not verified in this session. Deployment status is recorded in the associated PR.
+
+---
+
 # Capacity update — 23 September 2026
 
 Added Åpen semi, Flisbil and Maskinsemi to the existing Dører / tilvalg choice in registration and editing. Added a required loading-region field in the form, separate from desired direction: Nord-Norge (Nordland, Troms, Finnmark), Midt-Norge (Trøndelag), Sør-Norge (remaining Norway) and Utlandet.
