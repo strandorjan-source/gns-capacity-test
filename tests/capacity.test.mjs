@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeRegistration, osloDateTime, vehiclePayload, blankVehicle, isStaff, isAdmin, canDeleteVehicle, authErrorFromUrl, withTimeout, formatDate, vehicleChanges, vehicleForm, isHistorical, osloDate, reservationComment } from '../lib/capacity.mjs';
+import { normalizeRegistration, osloDateTime, vehiclePayload, blankVehicle, isStaff, isAdmin, canDeleteVehicle, authErrorFromUrl, withTimeout, formatDate, vehicleChanges, vehicleForm, isHistorical, osloDate, reservationComment, filterVehicles } from '../lib/capacity.mjs';
 
 test('registration is normalized consistently', () => assert.equal(normalizeRegistration(' yf - 22647 '), 'YF22647'));
 test('invalid registration is rejected', () => { for (const v of ['', 'A', 'A/B', '<script>', 'A'.repeat(17)]) assert.throws(() => normalizeRegistration(v)); });
@@ -19,6 +19,16 @@ test('vehicle requires login and required fields', () => { assert.throws(() => v
 test('timeout prevents endless loading', async () => { await assert.rejects(withTimeout(new Promise(()=>{}),5),/lang tid/); assert.equal(await withTimeout(Promise.resolve(42),50),42); });
 
 const validForm = { ...blankVehicle, carrier:'Transport', contact:'Kontakt', phone:'123', registration:'AB12345', date:'2026-09-21', time:'09:00', door_type:'Bakdører',loading_region:'Sør-Norge' };
+test('trailer number survives creation and editing, supports fleet identifiers and can be cleared', () => {
+ const row=vehiclePayload({...validForm,trailer_number:'  Tralle 007-A  '},'owner');
+ assert.equal(row.trailer_number,'Tralle 007-A');
+ assert.equal(vehicleChanges(vehicleForm(row)).trailer_number,'Tralle 007-A');
+ assert.equal(vehicleChanges({...vehicleForm(row),trailer_number:' '}).trailer_number,null);
+ assert.equal(vehicleForm({...row,trailer_number:null}).trailer_number,'');
+ assert.equal(vehiclePayload(validForm,'owner').trailer_number,null);
+ assert.throws(()=>vehicleChanges({...validForm,trailer_number:'x'.repeat(51)}),/Trallenummer/);
+ assert.equal(filterVehicles([row],{query:'007-a'}).length,1);
+});
 test('editing cannot reset a reservation or replace the owner', () => { const p=vehicleChanges({...validForm,owner_user_id:'other',status:'Ledig',reserved_by:null,reserved_at:null,deleted_at:'now'}); for(const k of ['owner_user_id','status','reserved_by','reserved_at','deleted_at']) assert.ok(!(k in p)); });
 test('door type is explicit and independent of vehicle type', () => { for(const door_type of ['Bakdører','Sideåpning','Sideåpning og bakdører']) assert.equal(vehicleChanges({...validForm,door_type}).door_type,door_type); for(const door_type of ['',null,'x']) assert.throws(()=>vehicleChanges({...validForm,door_type})); });
 test('same-day availability stays active until Norwegian midnight', () => { const row={available_at:'2026-09-19T07:00:00Z'}; assert.equal(isHistorical(row,osloDate('2026-09-19T21:59:59Z')),false); assert.equal(isHistorical(row,osloDate('2026-09-19T22:00:00Z')),true); assert.equal(isHistorical({...row,deleted_at:'2026-09-18T10:00:00Z'},'2026-09-18'),true); });

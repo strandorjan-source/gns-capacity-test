@@ -50,7 +50,8 @@ export function VehicleForm({ form, setForm, onSubmit, busy, submitLabel }) {
   return <form onSubmit={onSubmit}>
     <Field label="Transportør / firma"><input required maxLength={200} {...field('carrier')} placeholder="Firmanavn" /></Field>
     <div className="two"><Field label="Kontaktperson"><input required maxLength={200} {...field('contact')} /></Field><Field label="Telefon"><input type="tel" required maxLength={50} {...field('phone')} /></Field></div>
-    <div className="two"><Field label="Registreringsnummer"><input required maxLength={24} {...field('registration')} placeholder="F.eks. YN 12345" /></Field><Field label="Hvor er bilen ledig?"><input required maxLength={200} {...field('location')} /></Field></div>
+    <div className="two"><Field label="Registreringsnummer"><input required maxLength={24} {...field('registration')} placeholder="F.eks. YN 12345" /></Field><Field label="Trallenummer (valgfritt)"><input maxLength={50} {...field('trailer_number')} placeholder="Reg.nr eller internt trallenr" /></Field></div>
+    <Field label="Hvor er bilen ledig?"><input required maxLength={200} {...field('location')} /></Field>
     <Field label="Landsdel klar for lasting"><select required aria-describedby="loading-region-help" {...field('loading_region')}><option value="" disabled>Velg landsdel</option>{loadingRegions.map(region => <option key={region}>{region}</option>)}</select></Field>
     <p className="hint" id="loading-region-help">Nord-Norge: Nordland, Troms og Finnmark. Midt-Norge: Trøndelag. Sør-Norge: resten av Norge.</p>
     <div className="two"><Field label="Dato (norsk tid)"><input type="date" required {...field('date')} /></Field><Field label="Klokkeslett (norsk tid)"><input type="time" required {...field('time')} /></Field></div>
@@ -63,11 +64,11 @@ export function VehicleForm({ form, setForm, onSubmit, busy, submitLabel }) {
 
 export function VehicleTable({ rows, profile, userId, busy, onAction, onEvents }) {
   const admin = isAdmin(profile), staff = isStaff(profile);
-  return <div className="table"><table className="vehicle-table"><thead><tr><th>Status</th><th>Transportør</th><th>Reg.nr / sted</th><th>Ledig fra</th><th>Biltype / tilvalg</th><th>Reservasjon / lass</th><th>Handling</th></tr></thead><tbody>
+  return <div className="table"><table className="vehicle-table"><thead><tr><th>Status</th><th>Transportør</th><th>Reg.nr / tralle / sted</th><th>Ledig fra</th><th>Biltype / tilvalg</th><th>Reservasjon / lass</th><th>Handling</th></tr></thead><tbody>
     {rows.map(row => <tr key={row.id} className={row.deleted_at ? 'deleted' : row.status === 'Ledig' ? 'available' : 'reserved'}>
       <td><span className={`pill ${row.deleted_at ? 'slettet' : row.status.toLowerCase()}`}>{row.deleted_at ? 'Slettet' : row.status}</span>{row.is_history && !row.deleted_at && <small>Passert dato</small>}</td>
       <td><b>{row.carrier}</b><small>{row.contact}{row.phone ? ` · ${row.phone}` : ''}</small>{row.comment && <small className="multiline">{row.comment}</small>}</td>
-      <td><b>{row.registration}</b><small>{row.location}</small><small className="loading-region">Klar for lasting: {row.loading_region || 'Ikke oppgitt'}</small><small>Retning: {row.direction || '–'}</small></td>
+      <td><b>{row.registration}</b><small>Tralle: {row.trailer_number || 'Ikke oppgitt'}</small><small>{row.location}</small><small className="loading-region">Klar for lasting: {row.loading_region || 'Ikke oppgitt'}</small><small>Retning: {row.direction || '–'}</small></td>
       <td>{formatDate(row.available_at)[0]}<small>kl. {formatDate(row.available_at)[1]}</small></td>
       <td>{row.vehicle_type || '–'}<small className="door-type">{row.door_type || 'Tilvalg: Ikke oppgitt'}</small></td>
       <td className="reservation-cell">{row.status === 'Reservert' ? <><b>{row.reserved_by_name || row.reserved_by_email || 'Ukjent bruker'}</b>{row.reserved_by_email && <small>{row.reserved_by_email}</small>}<small>{formatDate(row.reserved_at).join(' kl. ')}</small><p className="multiline">{row.reservation_comment || 'Ingen lasskommentar registrert'}</p></> : <span className="muted">Ingen aktiv reservasjon</span>}</td>
