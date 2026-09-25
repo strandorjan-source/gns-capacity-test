@@ -54,3 +54,26 @@ test('admin form exposes the requested load fields and optional loading time',()
  for(const label of ['Lastested','Leveringssted','Lastedato','Gods / omfang','Bilbehov','Kontaktperson hos GNS','Telefon','Publiser lass']) assert.ok(html.includes(label));
  assert.match(html,/<input type="time" value=""/);
 });
+
+test('interest controls belong to approved carriers on current loads and show persisted state',()=>{
+ const render=(profile,entry=row)=>renderToStaticMarkup(h(LoadList,{rows:[entry],profile,today:'2026-09-25',busy:false,onInterest(){}}));
+ const carrier={role:'carrier',approved:true,user_id:'carrier'};
+ assert.ok(render(carrier).includes('>Interessert</button>'));
+ const responded={...row,interests:[{user_id:'carrier',interested:true}]};
+ const html=render(carrier,responded);
+ assert.ok(html.includes('Interesse meldt')&&html.includes('Trekk interesse'));
+ assert.ok(render(carrier,{...row,interests:[{user_id:'other',interested:true}]}).includes('>Interessert</button>'));
+ for(const profile of [{...carrier,approved:false},{role:'dispatcher',approved:true},{role:'admin',approved:true}]) assert.ok(!render(profile).includes('>Interessert</button>'));
+ assert.ok(!render(carrier,{...row,deleted_at:'now'}).includes('>Interessert</button>'));
+ assert.ok(!render(carrier,{...row,loading_date:'2026-09-24'}).includes('>Interessert</button>'));
+});
+test('admin sees active interested carriers with contact information, but carriers do not get that list',()=>{
+ const responses={...row,interests:[
+  {user_id:'one',interested:true,updated_at:'2026-09-25T10:00:00Z',person:{company:'Test Transport',full_name:'Test Person',email:'test@example.invalid'}},
+  {user_id:'two',interested:false,person:{company:'Withdrawn Carrier'}}
+ ]};
+ const html=list('admin',true,responses);
+ for(const value of ['Interesserte transportører','Test Transport','Test Person','test@example.invalid']) assert.ok(html.includes(value));
+ assert.ok(!html.includes('Withdrawn Carrier'));
+ assert.ok(!list('carrier',true,responses).includes('Test Transport'));
+});
