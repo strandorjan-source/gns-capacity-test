@@ -2,23 +2,28 @@
 import { useEffect, useRef } from 'react';
 import { doorTypes, loadingRegions, vehicleTypeTabs, isAdmin, isStaff, canDeleteVehicle, canEditVehicle, dateOptionLabel, formatDate, eventName, vehicleLabels } from '../lib/capacity.mjs';
 
-export function CapacityFilters({ history, dates, date, onDate, status, onStatus, counts, region = '', onRegion, ownOverview = false }) {
-  // Keep the selected day visible if the final vehicle is moved or deleted live.
-  const options = [...new Set([...dates, ...(date ? [date] : [])])].sort();
-  if (history) options.reverse();
-  const tabs = [...(ownOverview ? [['Alle', 'Alle mine biler', 'mine']] : []), ['Ledig', 'Ledige biler', 'available'], ['Reservert', 'Reserverte biler', 'reserved']];
+export function CapacityStatusTabs({ status, onStatus, counts = {}, ownOverview = false, panelId = 'vehicle-results' }) {
+  const tabs = [...(ownOverview ? [['Alle', 'Alle mine biler', 'mine']] : []), ['Ledig', 'Ledige biler', 'available'], ['Reservert', 'Reserverte biler', 'reserved'], ['Lass', 'Ledige lass', 'loads']];
   function tabKeys(event) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const current = tabs.findIndex(([value]) => value === status);
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
     onStatus(tabs[next][0]);
-    event.currentTarget.parentElement.querySelector(`#tab-${tabs[next][2]}`)?.focus();
+    // The load board mounts a new tab group; restore keyboard focus after navigation.
+    requestAnimationFrame(() => document.getElementById(`tab-${tabs[next][2]}`)?.focus());
   }
+  return <div className="status-tabs" role="tablist" aria-label="Kapasitetsoversikt">
+    {tabs.map(([value, label, id]) => <button key={value} id={`tab-${id}`} type="button" role="tab" aria-selected={status === value} aria-controls={panelId} tabIndex={status === value ? 0 : -1} className={status === value ? `selected ${id}` : ''} onClick={() => onStatus(value)} onKeyDown={tabKeys}>{label}{value !== 'Lass' && <span>{counts[value] || 0}</span>}</button>)}
+  </div>;
+}
+
+export function CapacityFilters({ history, dates, date, onDate, status, onStatus, counts, region = '', onRegion, ownOverview = false }) {
+  // Keep the selected day visible if the final vehicle is moved or deleted live.
+  const options = [...new Set([...dates, ...(date ? [date] : [])])].sort();
+  if (history) options.reverse();
   return <div className="capacity-filters">
-    {!history && <div className="status-tabs" role="tablist" aria-label="Bilstatus">
-      {tabs.map(([value, label, id]) => <button key={value} id={`tab-${id}`} type="button" role="tab" aria-selected={status === value} aria-controls="vehicle-results" tabIndex={status === value ? 0 : -1} className={status === value ? `selected ${id}` : ''} onClick={() => onStatus(value)} onKeyDown={tabKeys}>{label}<span>{counts[value] || 0}</span></button>)}
-    </div>}
+    {!history && <CapacityStatusTabs status={status} onStatus={onStatus} counts={counts} ownOverview={ownOverview} />}
     <label className="date-filter region-filter">Klar for lasting i<select value={region} onChange={event => onRegion(event.target.value)}><option value="">Alle landsdeler</option>{loadingRegions.map(value => <option key={value}>{value}</option>)}<option value="unknown">Ikke oppgitt</option></select></label>
     <label className="date-filter">Ledigdato<select value={date} onChange={event => onDate(event.target.value)}><option value="">Alle datoer</option>{options.map(day => <option value={day} key={day}>{dateOptionLabel(day)}</option>)}</select></label>
     {date && <button type="button" className="clear-filter" onClick={() => onDate('')}>Vis alle datoer</button>}

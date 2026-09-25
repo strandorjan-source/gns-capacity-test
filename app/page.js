@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, canEditVehicle, filterVehicles, vehicleDates, matchesVehicleType, vehicleTypeCounts, vehiclePayload, vehicleChanges, vehicleForm, reservationComment, formatDate, authErrorFromUrl, userMessage, withTimeout } from '../lib/capacity.mjs';
-import { VehicleForm, VehicleTable, CapacityFilters, VehicleTypeTabs, Modal, EventLog } from './vehicle-components';
+import { VehicleForm, VehicleTable, CapacityFilters, CapacityStatusTabs, VehicleTypeTabs, Modal, EventLog } from './vehicle-components';
 import LoadsBoard from './loads-board';
 
 // Capture provider errors before the SDK consumes/cleans the callback URL.
@@ -153,7 +153,10 @@ export default function Page() {
   const statusRows = useMemo(() => history || status === 'Alle' ? matchingRows : matchingRows.filter(row => row.status === status), [matchingRows, history, status]);
   const typeCounts = useMemo(() => vehicleTypeCounts(statusRows), [statusRows]);
   const filtered = useMemo(() => history ? statusRows : statusRows.filter(row => matchesVehicleType(row, vehicleType)), [statusRows, history, vehicleType]);
-  function selectOverview(nextStatus) { setStatus(nextStatus); setVehicleType('all'); }
+  function selectOverview(nextStatus) {
+    if (nextStatus === 'Lass') { setView('loads'); return; }
+    setView('tower'); setStatus(nextStatus); setVehicleType('all');
+  }
   useEffect(() => setPage(0), [q, view, selectedDate, status, region, vehicleType]);
   const lastPage = Math.max(0, Math.ceil(filtered.length / 50) - 1);
   const currentPage = Math.min(page, lastPage);
@@ -306,7 +309,8 @@ export default function Page() {
         </div>
       </div>
     </section>}
-    {view === 'loads' && <LoadsBoard key={`${session.user.id}:${profile.role}`} supabase={supabase} profile={profile} />}
+    {view === 'loads' && <LoadsBoard key={`${session.user.id}:${profile.role}`} supabase={supabase} profile={profile}
+      navigation={<CapacityStatusTabs status="Lass" onStatus={selectOverview} counts={statusCounts} ownOverview={!staff} panelId="load-results" />} />}
     {view === 'register' && <section className="formpage"><div className="formcard"><span className="eyebrow">GNS CAPACITY</span><h1>Meld inn ledig bil</h1><p>Registrer én konkret bil, velg dører / tilvalg og landsdelen der bilen er klar for lasting. Dato og klokkeslett angis i norsk tid.</p>
       <VehicleForm form={form} setForm={setForm} onSubmit={submit} busy={busy} submitLabel="Meld inn ledig bil" />
     </div></section>}

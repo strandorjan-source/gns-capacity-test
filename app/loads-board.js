@@ -5,7 +5,7 @@ import { blankLoad, isCurrentLoad, loadChanges, loadForm } from '../lib/loads.mj
 import { LoadForm, LoadList } from './load-components';
 import { Modal } from './vehicle-components';
 
-export default function LoadsBoard({ supabase, profile }) {
+export default function LoadsBoard({ supabase, profile, navigation }) {
   const admin = isAdmin(profile);
   const [rows, setRows] = useState([]), [loading, setLoading] = useState(true);
   const [history, setHistory] = useState(false), [message, setMessage] = useState('');
@@ -86,6 +86,8 @@ export default function LoadsBoard({ supabase, profile }) {
     <div className="hero"><div><span className="eyebrow">GNS CAPACITY</span><h1>Ledige lass</h1><p>Lass fra GNS, tilgjengelige for alle godkjente transportører. Kontakt oppgitt kontaktperson for å avtale transport.</p></div>
       {admin && <button className="primary" disabled={busy} onClick={() => openForm()}>+ Legg inn lass</button>}
     </div>
+    {navigation && <div className="load-navigation">{navigation}</div>}
+    <div id="load-results" role="tabpanel" aria-labelledby="tab-loads" tabIndex={0}>
     <div className="load-toolbar"><h2>{history && admin ? 'Tidligere og fjernede lass' : 'Tilgjengelige lass'}</h2><div>
       {admin && <label><input type="checkbox" checked={history} disabled={busy} onChange={event => { setRows([]); setHistory(event.target.checked); setMessage(''); }} /> Vis tidligere og fjernede lass</label>}
       <button disabled={busy || loading} onClick={() => refresh()}>Oppdater</button>
@@ -96,6 +98,7 @@ export default function LoadsBoard({ supabase, profile }) {
       <LoadList rows={rows} profile={profile} busy={busy} onEdit={openForm} onRemove={row => { setMessage(''); setModal({ kind: 'remove', row }); }} onRestore={restore} />
       {!rows.length && !error && <div className="panel empty">{history && admin ? 'Ingen tidligere eller fjernede lass.' : admin ? 'Ingen ledige lass ennå. Trykk «Legg inn lass» for å publisere et lass.' : 'Ingen ledige lass akkurat nå. Nye lass vises her når GNS publiserer dem.'}</div>}
     </>}
+    </div>
     {modal && admin && <Modal title={modal.kind === 'remove' ? 'Fjern lass' : modal.row ? 'Rediger lass' : 'Legg inn ledig lass'} busy={busy} message={message} onClose={() => setModal(null)}>
       {modal.kind === 'edit' ? <LoadForm form={form} setForm={setForm} busy={busy} onSubmit={save} submitLabel={modal.row && isCurrentLoad(modal.row) ? 'Lagre endringer' : 'Publiser lass'} />
         : <><p>Fjerne lasset fra {modal.row.pickup} til {modal.row.delivery}? Det blir borte fra transportørenes oversikt og kan gjenopprettes av admin.</p><button className="dangerButton full" disabled={busy} onClick={() => setRemoved(modal.row, true)}>{busy ? 'Fjerner …' : 'Fjern fra ledige lass'}</button></>}
