@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, canEditVehicle, filterVehicles, vehicleDates, matchesVehicleType, vehicleTypeCounts, vehiclePayload, vehicleChanges, vehicleForm, reservationComment, formatDate, authErrorFromUrl, userMessage, withTimeout } from '../lib/capacity.mjs';
 import { VehicleForm, VehicleTable, CapacityFilters, VehicleTypeTabs, Modal, EventLog } from './vehicle-components';
+import LoadsBoard from './loads-board';
 
 // Capture provider errors before the SDK consumes/cleans the callback URL.
 const initialAuthError = typeof window !== 'undefined' ? authErrorFromUrl(window.location.href) : '';
@@ -285,6 +286,7 @@ export default function Page() {
     <header><Brand /><nav>
       <button className={view === 'tower' ? 'active' : ''} onClick={() => { setView('tower'); if (!staff) { setStatus('Alle'); setVehicleType('all'); } }}>{staff ? 'Control Tower' : 'Mine biler'}</button>
       <button className={view === 'register' ? 'active' : ''} onClick={() => setView('register')}>Meld inn bil</button>
+      <button className={view === 'loads' ? 'active' : ''} onClick={() => setView('loads')}>Ledige lass</button>
       <button className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}>Historikk</button>
       {admin && <button className={view === 'users' ? 'active' : ''} onClick={() => { setView('users'); refresh(); }}>Brukere</button>}
     </nav><div className="account"><span>{profile.full_name || profile.email}<small>{roleName(profile.role)}</small></span><button disabled={busy} onClick={logout}>Logg ut</button></div></header>
@@ -304,6 +306,7 @@ export default function Page() {
         </div>
       </div>
     </section>}
+    {view === 'loads' && <LoadsBoard key={`${session.user.id}:${profile.role}`} supabase={supabase} profile={profile} />}
     {view === 'register' && <section className="formpage"><div className="formcard"><span className="eyebrow">GNS CAPACITY</span><h1>Meld inn ledig bil</h1><p>Registrer én konkret bil, velg dører / tilvalg og landsdelen der bilen er klar for lasting. Dato og klokkeslett angis i norsk tid.</p>
       <VehicleForm form={form} setForm={setForm} onSubmit={submit} busy={busy} submitLabel="Meld inn ledig bil" />
     </div></section>}
