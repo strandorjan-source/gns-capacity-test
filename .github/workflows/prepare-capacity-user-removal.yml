@@ -92,6 +92,8 @@ jobs:
         run: |
           rm -rf app/i18n-check app/users-check
           rm .github/workflows/prepare-capacity-user-removal.yml
+          # Apply the CI-workflow update separately through the authorized connector.
+          git restore -- .github/workflows/capacity-checks.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
