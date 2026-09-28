@@ -27,7 +27,8 @@ jobs:
       - name: Localize existing components without changing operational logic
         run: |
           node scripts/localize-once.cjs
-          git diff -- app > test-artifacts/localization.patch
+          node scripts/finalize-localization.cjs
+          git diff -- app lib tests > test-artifacts/localization.patch
       - name: All regression and localization unit tests
         run: |
           set -euo pipefail
@@ -55,10 +56,10 @@ jobs:
       - name: Save verified sources and remove one-time preparation machinery
         run: |
           rm -rf app/i18n-check
-          rm scripts/localize-once.cjs .github/workflows/prepare-capacity-languages.yml
+          rm scripts/localize-once.cjs scripts/finalize-localization.cjs .github/workflows/prepare-capacity-languages.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app lib tests scripts/localize-once.cjs .github/workflows/prepare-capacity-languages.yml
+          git add app lib tests scripts/localize-once.cjs scripts/finalize-localization.cjs .github/workflows/prepare-capacity-languages.yml
           git commit -m 'Integrate and browser-verify seven-language Capacity UI'
           git push origin HEAD:feat/capacity-languages
       - uses: actions/upload-artifact@v4
