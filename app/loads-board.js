@@ -1,4 +1,5 @@
 'use client';
+import { useI18n } from './i18n-provider';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isAdmin, osloDate, userMessage, withTimeout } from '../lib/capacity.mjs';
 import { blankLoad, isCurrentLoad, loadChanges, loadForm } from '../lib/loads.mjs';
@@ -6,6 +7,8 @@ import { LoadForm, LoadList } from './load-components';
 import { Modal } from './vehicle-components';
 
 export default function LoadsBoard({ supabase, profile, navigation }) {
+  const { t: _t, formatDate, dateOptionLabel, loadDateLabel } = useI18n();
+
   const admin = isAdmin(profile);
   const [rows, setRows] = useState([]), [loading, setLoading] = useState(true);
   const [history, setHistory] = useState(false), [message, setMessage] = useState('');
@@ -102,25 +105,25 @@ export default function LoadsBoard({ supabase, profile, navigation }) {
   }
 
   return <section className="wrap loads-board">
-    <div className="hero"><div><span className="eyebrow">GNS CAPACITY</span><h1>Ledige lass</h1><p>Lass fra GNS, tilgjengelige for alle godkjente transportører. Kontakt oppgitt kontaktperson for å avtale transport.</p></div>
-      {admin && <button className="primary" disabled={busy} onClick={() => openForm()}>+ Legg inn lass</button>}
+    <div className="hero"><div><span className="eyebrow">GNS CAPACITY</span><h1>{_t("Ledige lass")}</h1><p>{_t("Lass fra GNS, tilgjengelige for alle godkjente transportører. Kontakt oppgitt kontaktperson for å avtale transport.")}</p></div>
+      {admin && <button className="primary" disabled={busy} onClick={() => openForm()}>{_t("+ Legg inn lass")}</button>}
     </div>
     {navigation && <div className="load-navigation">{navigation}</div>}
     <div id="load-results" role="tabpanel" aria-labelledby="tab-loads" tabIndex={0}>
-    <div className="load-toolbar"><h2>{history && admin ? 'Tidligere og fjernede lass' : 'Tilgjengelige lass'}</h2><div>
-      {admin && <label><input type="checkbox" checked={history} disabled={busy} onChange={event => { setRows([]); setHistory(event.target.checked); setMessage(''); }} /> Vis tidligere og fjernede lass</label>}
-      <button disabled={busy || loading} onClick={() => refresh()}>Oppdater</button>
+    <div className="load-toolbar"><h2>{history && admin ? _t('Tidligere og fjernede lass') : _t('Tilgjengelige lass')}</h2><div>
+      {admin && <label><input type="checkbox" checked={history} disabled={busy} onChange={event => { setRows([]); setHistory(event.target.checked); setMessage(''); }} />{_t(" Vis tidligere og fjernede lass")}</label>}
+      <button disabled={busy || loading} onClick={() => refresh()}>{_t("Oppdater")}</button>
     </div></div>
-    {message && !modal && <div role="status" className="load-notice">{message}</div>}
-    {error && <div role="alert" className="formerror">Kunne ikke hente lass: {error}</div>}
-    {loading ? <p role="status" className="empty">Laster lass …</p> : <>
+    {_t(message) && !modal && <div role="status" className="load-notice">{_t(message)}</div>}
+    {_t(error) && <div role="alert" className="formerror">{_t("Kunne ikke hente lass: ")}{_t(error)}</div>}
+    {loading ? <p role="status" className="empty">{_t("Laster lass …")}</p> : <>
       <LoadList rows={rows} profile={profile} busy={busy} onEdit={openForm} onRemove={row => { setMessage(''); setModal({ kind: 'remove', row }); }} onRestore={restore} onInterest={interest} interestBusyId={interestBusyId} />
-      {!rows.length && !error && <div className="panel empty">{history && admin ? 'Ingen tidligere eller fjernede lass.' : admin ? 'Ingen ledige lass ennå. Trykk «Legg inn lass» for å publisere et lass.' : 'Ingen ledige lass akkurat nå. Nye lass vises her når GNS publiserer dem.'}</div>}
+      {!rows.length && !error && <div className="panel empty">{history && admin ? _t('Ingen tidligere eller fjernede lass.') : admin ? _t('Ingen ledige lass ennå. Trykk «Legg inn lass» for å publisere et lass.') : _t('Ingen ledige lass akkurat nå. Nye lass vises her når GNS publiserer dem.')}</div>}
     </>}
     </div>
-    {modal && admin && <Modal title={modal.kind === 'remove' ? 'Fjern lass' : modal.row ? 'Rediger lass' : 'Legg inn ledig lass'} busy={busy} message={message} onClose={() => setModal(null)}>
-      {modal.kind === 'edit' ? <LoadForm form={form} setForm={setForm} busy={busy} onSubmit={save} submitLabel={modal.row && isCurrentLoad(modal.row) ? 'Lagre endringer' : 'Publiser lass'} />
-        : <><p>Fjerne lasset fra {modal.row.pickup} til {modal.row.delivery}? Det blir borte fra transportørenes oversikt og kan gjenopprettes av admin.</p><button className="dangerButton full" disabled={busy} onClick={() => setRemoved(modal.row, true)}>{busy ? 'Fjerner …' : 'Fjern fra ledige lass'}</button></>}
+    {modal && admin && <Modal title={modal.kind === 'remove' ? _t('Fjern lass') : modal.row ? _t('Rediger lass') : _t('Legg inn ledig lass')} busy={busy} message={message} onClose={() => setModal(null)}>
+      {modal.kind === 'edit' ? <LoadForm form={form} setForm={setForm} busy={busy} onSubmit={save} submitLabel={modal.row && isCurrentLoad(modal.row) ? _t('Lagre endringer') : _t('Publiser lass')} />
+        : <><p>{_t("Fjerne lasset fra {pickup} til {delivery}? Det blir borte fra transportørenes oversikt og kan gjenopprettes av admin.", { pickup: modal.row.pickup, delivery: modal.row.delivery })}</p><button className="dangerButton full" disabled={busy} onClick={() => setRemoved(modal.row, true)}>{busy ? _t('Fjerner …') : _t('Fjern fra ledige lass')}</button></>}
     </Modal>}
   </section>;
 }

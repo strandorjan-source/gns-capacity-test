@@ -30,6 +30,7 @@ test('only current and undeleted loads belong in the active board',()=>{
 const require=createRequire(import.meta.url);
 const {transformSync}=require('next/dist/compiled/babel/core');
 const source=readFileSync(new URL('../app/load-components.js',import.meta.url),'utf8')
+ .replace('./i18n-provider',new URL('./i18n-test-context.mjs',import.meta.url).href)
  .replace('../lib/capacity.mjs',new URL('../lib/capacity.mjs',import.meta.url).href)
  .replace('../lib/loads.mjs',new URL('../lib/loads.mjs',import.meta.url).href);
 const {code}=transformSync(source,{filename:'load-components.js',presets:[[require.resolve('next/babel'),{
