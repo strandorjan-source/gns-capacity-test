@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, canEditVehicle, filterVehicles, vehicleDates, matchesVehicleType, vehicleTypeCounts, vehiclePayload, vehicleChanges, vehicleForm, reservationComment, formatDate, authErrorFromUrl, userMessage, withTimeout } from '../lib/capacity.mjs';
 import { VehicleForm, VehicleTable, CapacityFilters, CapacityStatusTabs, VehicleTypeTabs, Modal, EventLog } from './vehicle-components';
 import LoadsBoard from './loads-board';
+import { UsersPanel, RemovedAccess } from './user-components';
 
 // Capture provider errors before the SDK consumes/cleans the callback URL.
 const initialAuthError = typeof window !== 'undefined' ? authErrorFromUrl(window.location.href) : '';
@@ -78,15 +79,13 @@ export default function Page() {
       if (changedUser || profileAccess.current !== nextAccess) { setModal(null); setEvents([]); setStatus(isStaff(nextProfile) ? 'Ledig' : 'Alle'); setVehicleType('all'); ++eventRequest.current; }
       profileAccess.current = nextAccess;
       // Clear data immediately on revocation, before any further fetch.
-      if (!nextProfile.approved) {
+      if (!nextProfile.approved || nextProfile.deleted_at) {
         setProfile(nextProfile); setRows([]); setProfiles([]); setView('tower'); setModal(null); setEvents([]); ++eventRequest.current; setPhase('ready'); return;
       }
       const vehicles = await readAll(() => supabase.from('capacity_vehicle_overview').select('*').order('available_at').order('id'));
       let nextProfiles = [];
       if (isAdmin(nextProfile)) {
-        const users = await withTimeout(supabase.from('capacity_profiles').select('*').order('created_at', { ascending: false }));
-        if (users.error) throw users.error;
-        nextProfiles = users.data || [];
+        nextProfiles = await readAll(() => supabase.from('capacity_profiles').select('*').is('deleted_at', null).order('created_at', { ascending: false }).order('user_id'));
       }
       if (ticket !== generation.current) return;
       setProfile(nextProfile); setRows(vehicles); setProfiles(nextProfiles); setPhase('ready');
@@ -273,7 +272,7 @@ export default function Page() {
   async function access(userId, changes) {
     if (!admin || userId === session.user.id) return;
     await action(async () => {
-      const { data, error } = await withTimeout(supabase.from('capacity_profiles').update(changes).eq('user_id', userId).select('user_id').maybeSingle());
+      const { data, error } = await withTimeout(supabase.from('capacity_profiles').update(changes).eq('user_id', userId).is('deleted_at', null).select('user_id').maybeSingle());
       if (error) throw error;
       if (!data) throw new Error('Tilgangen kunne ikke endres. Kontroller at du fortsatt er administrator.');
       await refresh();
@@ -284,6 +283,7 @@ export default function Page() {
   if (phase === 'loading') return <Center title="GNS Capacity" text={_t("Laster sikker innlogging og kapasitet …")} spin />;
   if (phase === 'error') return <Center title={_t("Kunne ikke laste GNS Capacity")} text={_t(message)} retry={() => load(currentSession.current)} logout={session ? logout : null} />;
   if (!session) return <Login login={login} message={message} busy={busy} />;
+  if (profile?.deleted_at) return <RemovedAccess logout={logout} busy={busy} />;
   if (!profile?.approved) return <Pending profile={profile} save={savePending} logout={logout} busy={busy} message={message} refresh={refresh} />;
 
   const available = activeRows.filter(row => row.status === 'Ledig').length;
@@ -318,11 +318,7 @@ export default function Page() {
       <VehicleForm form={form} setForm={setForm} onSubmit={submit} busy={busy} submitLabel={_t("Meld inn ledig bil")} />
     </div></section>}
     {view === 'thanks' && <section className="thanks"><div><div className="check">✓</div><h1>{_t("Bilen er registrert")}</h1><p>{_t("Bilen er lagret. Dagens og fremtidige ledigdatoer vises i Control Tower. Passerte datoer vises i Historikk.")}</p><button className="primary" onClick={() => setView('register')}>{_t("Registrer en bil til")}</button><button className="link" onClick={() => { setView('tower'); refresh(); }}>{_t("Se Control Tower")}</button></div></section>}
-    {view === 'users' && admin && <section className="wrap users"><div className="hero"><div><span className="eyebrow">{_t("TILGANGSSTYRING")}</span><h1>{_t("Brukere")}</h1><p>{_t("Godkjenn nye brukere og velg riktig rolle. Egen administratortilgang kan ikke fjernes her.")}</p></div></div><div className="panel userlist">
-      {profiles.map(p => <div className="userrow" key={p.user_id}><div><b>{p.full_name || _t('Navn ikke registrert')}</b><small>{p.email}{p.company ? ` · ${p.company}` : ''}</small></div>
-        <select aria-label={`${_t("Rolle for ")}${p.full_name || p.email}`} disabled={busy || p.user_id === session.user.id} value={p.role} onChange={e => access(p.user_id, { role: e.target.value })}><option value="carrier">{_t("Transportør")}</option><option value="dispatcher">{_t("Dispatcher")}</option><option value="admin">{_t("Admin")}</option></select>
-        <button disabled={busy || p.user_id === session.user.id} className={p.approved ? 'dangerButton' : 'approveButton'} onClick={() => access(p.user_id, { approved: !p.approved })}>{p.approved ? _t('Trekk tilgang') : _t('Godkjenn')}</button></div>)}
-    </div></section>}
+    {view === 'users' && admin && <UsersPanel profiles={profiles} profile={profile} supabase={supabase} busy={busy} access={access} refresh={refresh} onRemoved={userId => setProfiles(old => old.filter(p => p.user_id !== userId))} />}
     {modal && <Modal title={`${{ edit: _t('Rediger bil'), reserve: _t('Reserver bil'), release: _t('Frigi bil'), delete: _t('Slett linje'), restore: _t('Gjenopprett linje'), events: _t('Hendelseslogg') }[modal.kind]} · ${modal.row.registration}`} busy={busy} onClose={() => { ++eventRequest.current; setModal(null); }} message={message}>
       {modal.kind === 'edit' && canEditVehicle(profile, session.user.id, modal.row) && <>{modal.row.status === 'Reservert' && <p className="hint">{_t("Bilen er reservert. Du kan oppdatere bilopplysningene; reservasjonen og lasskommentaren beholdes.")}</p>}<VehicleForm form={editing} setForm={setEditing} onSubmit={editVehicle} busy={busy} submitLabel={_t("Lagre endringer")} /></>}
       {modal.kind === 'reserve' && staff && <form onSubmit={e => { e.preventDefault(); reserve(modal.row, loadComment); }}><p>{modal.row.carrier} · {modal.row.location} · {formatDate(modal.row.available_at).join(' · ')}</p><Field label={_t("Hvilket lass bookes på bilen?")}><textarea autoFocus maxLength={2000} value={loadComment} onChange={e => setLoadComment(e.target.value)} placeholder={_t("F.eks. kunde, lastested, leveringssted og ordrenummer (valgfritt)")} /></Field><p className="hint">{_t("Reservasjonen lagres med din bruker og tidspunkt. Kommentaren er synlig for GNS og bilens transportør.")}</p><button disabled={busy} className="primary full">{busy ? _t('Reserverer …') : _t('Bekreft reservasjon')}</button></form>}
