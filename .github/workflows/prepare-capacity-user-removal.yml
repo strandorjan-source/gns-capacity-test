@@ -1,0 +1,108 @@
+name: Prepare Capacity user removal
+on:
+  push:
+    branches: [feat/admin-remove-capacity-users]
+permissions:
+  contents: write
+concurrency:
+  group: capacity-user-removal-preparation
+  cancel-in-progress: true
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_PUBLIC_SUPABASE_URL: https://capacity-ci.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_not_a_real_key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Integrate verified user-removal components
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          def replace_once(text, old, new):
+              assert text.count(old) == 1, f'Expected one replacement: {old[:100]}'
+              return text.replace(old, new, 1)
+          path = Path('app/page.js')
+          text = path.read_text()
+          text = replace_once(text, "import LoadsBoard from './loads-board';", "import LoadsBoard from './loads-board';\nimport { UsersPanel, RemovedAccess } from './user-components';")
+          text = replace_once(text, "if (!nextProfile.approved) {", "if (!nextProfile.approved || nextProfile.deleted_at) {")
+          old = "        const users = await withTimeout(supabase.from('capacity_profiles').select('*').order('created_at', { ascending: false }));\n        if (users.error) throw users.error;\n        nextProfiles = users.data || [];"
+          new = "        nextProfiles = await readAll(() => supabase.from('capacity_profiles').select('*').is('deleted_at', null).order('created_at', { ascending: false }).order('user_id'));"
+          text = replace_once(text, old, new)
+          text = replace_once(text, ".update(changes).eq('user_id', userId).select('user_id')", ".update(changes).eq('user_id', userId).is('deleted_at', null).select('user_id')")
+          text = replace_once(text, "  if (!profile?.approved) return <Pending", "  if (profile?.deleted_at) return <RemovedAccess logout={logout} busy={busy} />;\n  if (!profile?.approved) return <Pending")
+          start = text.index("    {view === 'users' && admin && <section")
+          end = text.index('    {modal && <Modal', start)
+          text = text[:start] + "    {view === 'users' && admin && <UsersPanel profiles={profiles} profile={profile} supabase={supabase} busy={busy} access={access} refresh={refresh} onRemoved={userId => setProfiles(old => old.filter(p => p.user_id !== userId))} />}\n" + text[end:]
+          path.write_text(text)
+          path = Path('lib/i18n.mjs')
+          text = path.read_text()
+          text = replace_once(text, "import { messageRows } from './i18n-messages.mjs';", "import { messageRows } from './i18n-messages.mjs';\nimport { userRows } from './i18n-users.mjs';")
+          text = replace_once(text, r'${labelRows}\n${messageRows}', r'${labelRows}\n${messageRows}\n${userRows}')
+          path.write_text(text)
+          path = Path('app/layout.js')
+          text = path.read_text()
+          text = replace_once(text, 'export const metadata', "import './users.css';\nexport const metadata")
+          path.write_text(text)
+          path = Path('.github/workflows/capacity-checks.yml')
+          text = path.read_text()
+          text = replace_once(text, 'mkdir -p app/i18n-check', 'mkdir -p app/i18n-check app/users-check')
+          text = replace_once(text, 'cp tests/fixtures/i18n-check.js app/i18n-check/page.js', 'cp tests/fixtures/i18n-check.js app/i18n-check/page.js\n          cp tests/fixtures/users-check.js app/users-check/page.js')
+          text = replace_once(text, 'rm -rf app/i18n-check', 'rm -rf app/i18n-check app/users-check')
+          text = replace_once(text, 'bash tests/i18n-browser.sh', 'bash tests/i18n-browser.sh\n          bash tests/users-browser.sh')
+          path.write_text(text)
+          PY
+          mkdir -p test-artifacts
+          git diff -- app lib .github/workflows/capacity-checks.yml > test-artifacts/user-removal-integration.patch
+      - run: npm ci
+      - name: Unit tests and dependency audit
+        run: |
+          set -euo pipefail
+          npm audit --omit=dev
+          node --test tests/*.test.mjs | tee test-artifacts/unit-tests.txt
+      - name: Build isolated verification routes
+        run: |
+          mkdir -p app/i18n-check app/users-check
+          cp tests/fixtures/i18n-check.js app/i18n-check/page.js
+          cp tests/fixtures/users-check.js app/users-check/page.js
+          npm run build
+      - name: Install browser verifier
+        run: |
+          npm install --global agent-browser@0.38.1
+          agent-browser install --with-deps
+      - name: Verify admin removal and existing carrier flows
+        run: |
+          npm start > server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          bash tests/browser-smoke.sh
+          bash tests/i18n-browser.sh
+          bash tests/users-browser.sh
+      - name: Save verified integration without test routes
+        run: |
+          rm -rf app/i18n-check app/users-check
+          rm .github/workflows/prepare-capacity-user-removal.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git diff --cached --stat
+          git commit -m 'Integrate and browser-verify safe admin user removal'
+          git push origin HEAD:feat/admin-remove-capacity-users
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capacity-user-removal-verification
+          path: |
+            test-artifacts/
+            server.log
+          retention-days: 7
