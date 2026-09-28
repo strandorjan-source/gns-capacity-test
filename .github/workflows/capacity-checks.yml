@@ -1,7 +1,7 @@
 name: Capacity checks
 on:
   push:
-    branches: [main]
+    branches: [main, feat/capacity-polish-latvian]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -27,7 +27,9 @@ jobs:
           npm audit --omit=dev --json > test-artifacts/npm-audit.json
           node -e 'const a=require("./test-artifacts/npm-audit.json"); console.log(a.metadata.vulnerabilities);'
       - name: Validation, authorization and localization unit tests
-        run: node --test tests/*.test.mjs
+        run: |
+          set -euo pipefail
+          node --test tests/*.test.mjs 2>&1 | tee test-artifacts/unit-tests.txt
       - name: Compile production application and isolated browser fixture
         run: |
           mkdir -p app/i18n-check app/users-check
@@ -53,7 +55,7 @@ jobs:
       - name: Verify public production deployment and Microsoft redirect
         if: always() && github.ref == 'refs/heads/main'
         run: bash tests/production-smoke.sh
-      - name: Verify seven languages on the public production page
+      - name: Verify nine languages on the public production page
         if: success() && github.ref == 'refs/heads/main'
         run: bash tests/production-languages.sh
       - uses: actions/upload-artifact@v4
