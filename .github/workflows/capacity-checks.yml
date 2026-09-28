@@ -30,8 +30,9 @@ jobs:
         run: node --test tests/*.test.mjs
       - name: Compile production application and isolated browser fixture
         run: |
-          mkdir -p app/i18n-check
+          mkdir -p app/i18n-check app/users-check
           cp tests/fixtures/i18n-check.js app/i18n-check/page.js
+          cp tests/fixtures/users-check.js app/users-check/page.js
           npm run build
       - name: Install pinned browser verification tool
         run: |
@@ -41,13 +42,14 @@ jobs:
         run: |
           npm start > server.log 2>&1 &
           SERVER_PID=$!
-          trap 'kill "$SERVER_PID" || true; rm -rf app/i18n-check' EXIT
+          trap 'kill "$SERVER_PID" || true; rm -rf app/i18n-check app/users-check' EXIT
           for i in $(seq 1 30); do
             if curl --fail --silent http://localhost:3000/api/health > /dev/null; then break; fi
             sleep 1
           done
           bash tests/browser-smoke.sh
           bash tests/i18n-browser.sh
+          bash tests/users-browser.sh
       - name: Verify public production deployment and Microsoft redirect
         if: always() && github.ref == 'refs/heads/main'
         run: bash tests/production-smoke.sh
