@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, canEditVehicle, filterVehicles, vehicleDates, matchesVehicleType, vehicleTypeCounts, vehiclePayload, vehicleChanges, vehicleForm, reservationComment, formatDate, authErrorFromUrl, userMessage, withTimeout } from '../lib/capacity.mjs';
 import { VehicleForm, VehicleTable, CapacityFilters, CapacityStatusTabs, VehicleTypeTabs, Modal, EventLog } from './vehicle-components';
 import LoadsBoard from './loads-board';
+import CargoOrderPicker from './cargo-order-picker';
 import { UsersPanel, RemovedAccess } from './user-components';
 import { platformProfile, platformUsers } from '../lib/platform-access.mjs';
 
@@ -59,6 +60,7 @@ export default function Page() {
   const [phase, setPhase] = useState('loading'), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [live, setLive] = useState(false);
   const [modal, setModal] = useState(null), [editing, setEditing] = useState(blankVehicle);
+  const [selectedCargoOrder, setSelectedCargoOrder] = useState(null);
   const [loadComment, setLoadComment] = useState(''), [events, setEvents] = useState([]), [eventLoading, setEventLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [status, setStatus] = useState('Ledig'), [dates, setDates] = useState({ tower: '', history: '' });
@@ -219,18 +221,22 @@ export default function Page() {
   }
   function openModal(kind, row) {
     if (kind === 'edit' && !canEditVehicle(profile, session?.user?.id, row)) return;
-    setMessage(''); setLoadComment(''); setEditing(vehicleForm(row)); setModal({ kind, row });
+    setMessage(''); setLoadComment(''); setSelectedCargoOrder(null); setEditing(vehicleForm(row)); setModal({ kind, row });
   }
   async function reserve(row, comment = null) {
     if (!staff) return;
     await action(async () => {
       const reserveNow = row.status === 'Ledig';
-      const { data, error } = await withTimeout(supabase.from('capacity_vehicles').update({
+      const result = reserveNow && selectedCargoOrder
+        ? supabase.rpc('reserve_capacity_for_order', { p_vehicle_id: row.id, p_vehicle_updated_at: row.updated_at, p_order_id: selectedCargoOrder.id, p_order_updated_at: selectedCargoOrder.updated_at, p_comment: reservationComment(comment) })
+        : supabase.from('capacity_vehicles').update({
         status: reserveNow ? 'Reservert' : 'Ledig', reservation_comment: reserveNow ? reservationComment(comment) : null,
-      }).eq('id', row.id).eq('status', row.status).eq('updated_at', row.updated_at).select('id').maybeSingle());
+      }).eq('id', row.id).eq('status', row.status).eq('updated_at', row.updated_at).select('id').maybeSingle();
+      const { data, error } = await withTimeout(result);
       if (error) throw error;
       setModal(null);
-      setMessage(data ? (reserveNow ? 'Bilen er reservert. Bruker, tidspunkt og lasskommentar er lagret.' : 'Bilen er frigitt. Reservasjonen er bevart i hendelsesloggen.') : 'Bilen ble endret av en annen bruker. Oversikten er oppdatert; prøv på nytt.');
+      setSelectedCargoOrder(null);
+      setMessage(data ? (reserveNow ? (selectedCargoOrder ? 'Bilen er reservert og koblet til GNS-' + selectedCargoOrder.order_number + '. Transportør og reg.nr er oppdatert på ordren.' : 'Bilen er reservert. Bruker, tidspunkt og lasskommentar er lagret.') : 'Bilen er frigitt. Reservasjonen er bevart i hendelsesloggen.') : 'Bilen ble endret av en annen bruker. Oversikten er oppdatert; prøv på nytt.');
       await refresh();
     });
   }
@@ -330,8 +336,8 @@ export default function Page() {
     {view === 'users' && admin && <UsersPanel profiles={profiles} profile={profile} supabase={supabase} busy={busy} access={access} refresh={refresh} onRemoved={userId => setProfiles(old => old.filter(p => p.user_id !== userId))} />}
     {modal && <Modal title={`${{ edit: _t('Rediger bil'), reserve: _t('Reserver bil'), release: _t('Frigi bil'), delete: _t('Slett linje'), restore: _t('Gjenopprett linje'), events: _t('Hendelseslogg') }[modal.kind]} · ${modal.row.registration}`} busy={busy} onClose={() => { ++eventRequest.current; setModal(null); }} message={message}>
       {modal.kind === 'edit' && canEditVehicle(profile, session.user.id, modal.row) && <>{modal.row.status === 'Reservert' && <p className="hint">{_t("Bilen er reservert. Du kan oppdatere bilopplysningene; reservasjonen og lasskommentaren beholdes.")}</p>}<VehicleForm form={editing} setForm={setEditing} onSubmit={editVehicle} busy={busy} submitLabel={_t("Lagre endringer")} /></>}
-      {modal.kind === 'reserve' && staff && <form onSubmit={e => { e.preventDefault(); reserve(modal.row, loadComment); }}><p>{modal.row.carrier} · {modal.row.location} · {formatDate(modal.row.available_at).join(' · ')}</p><Field label={_t("Hvilket lass bookes på bilen?")}><textarea autoFocus maxLength={2000} value={loadComment} onChange={e => setLoadComment(e.target.value)} placeholder={_t("F.eks. kunde, lastested, leveringssted og ordrenummer (valgfritt)")} /></Field><p className="hint">{_t("Reservasjonen lagres med din bruker og tidspunkt. Kommentaren er synlig for GNS og bilens transportør.")}</p><button disabled={busy} className="primary full">{busy ? _t('Reserverer …') : _t('Bekreft reservasjon')}</button></form>}
-      {modal.kind === 'release' && staff && <><p>{_t("Frigi {registration}? Tidligere reservasjon, bruker og lasskommentar bevares i hendelsesloggen.", { registration: modal.row.registration })}</p><button className="primary full" disabled={busy} onClick={() => reserve(modal.row)}>{_t("Bekreft frigivelse")}</button></>}
+      {modal.kind === 'reserve' && staff && <form onSubmit={e => { e.preventDefault(); reserve(modal.row, loadComment); }}><p>{modal.row.carrier} · {modal.row.location} · {formatDate(modal.row.available_at).join(' · ')}</p><CargoOrderPicker supabase={supabase} selected={selectedCargoOrder} onSelect={setSelectedCargoOrder} reservedOrderIds={rows.filter(row => row.status === 'Reservert' && !row.deleted_at && row.reserved_order_id).map(row => row.reserved_order_id)} vehicle={modal.row} busy={busy} /><Field label={_t("Hvilket lass bookes på bilen?")}><textarea maxLength={1800} value={loadComment} onChange={e => setLoadComment(e.target.value)} placeholder={_t("F.eks. kunde, lastested, leveringssted og ordrenummer (valgfritt)")} /></Field><p className="hint">{_t("Reservasjonen lagres med din bruker og tidspunkt. Kommentaren er synlig for GNS og bilens transportør.")}</p><button disabled={busy} className="primary full">{busy ? _t('Reserverer …') : _t('Bekreft reservasjon')}</button></form>}
+      {modal.kind === 'release' && staff && <><p>{_t("Frigi {registration}? Tidligere reservasjon, bruker og lasskommentar bevares i hendelsesloggen.", { registration: modal.row.registration })}</p><button className="primary full" disabled={busy} onClick={() => reserve(modal.row)}>{_t("Bekreft frigivelse")}</button>{modal.row.reserved_order_id && <p className="hint">Ordrekoblingen fjernes fra reservasjonen. Registrerte transportøropplysninger på Cargo-ordren beholdes.</p>}</>}
       {modal.kind === 'delete' && <><p>{_t("Slette linjen for {registration}? Den fjernes fra kapasitetstorget og merkes som slettet i Historikk. Admin kan gjenopprette linjen.", { registration: modal.row.registration })}</p><button className="dangerButton full" disabled={busy} onClick={() => remove(modal.row)}>{_t("Bekreft sletting")}</button></>}
       {modal.kind === 'restore' && admin && <><p>{_t("Gjenopprett linjen for {registration}. Dersom ledigdatoen er passert, blir bilen liggende under Historikk.", { registration: modal.row.registration })}</p><button className="primary full" disabled={busy} onClick={() => restore(modal.row)}>{_t("Gjenopprett")}</button></>}
       {modal.kind === 'events' && <EventLog events={events} loading={eventLoading} />}

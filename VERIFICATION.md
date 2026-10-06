@@ -93,3 +93,13 @@ Supabase advisors returned no Capacity-specific findings. Pre-existing shared-or
 - https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable
 - https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable
 - https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
+
+
+## 2026-10-06 — Cargo order reservations
+
+- Added a staff-only searchable Cargo order picker to the existing reservation dialog.
+- An authenticated, security-invoker RPC updates the vehicle reservation and Cargo carrier/registration in one transaction. The migration and rollback-only database tests are tracked in the companion `gnscargo` repository (`supabase/migrations/20261006180000_carriers_capacity_order_link.sql`, `supabase/tests/capacity_order_link.sql`).
+- Only the GNS reference and manually entered reservation comment are shared with the carrier. Cargo customer details and pickup phone fields are not selected into the picker or copied to event snapshots.
+- Real database role tests passed: register duplicates, access denial, stale order rejection without partial save, order assignment preserving prices, duplicate booking, release/rebook and audit retention.
+- All 67 existing unit tests and the production build passed. The mounted React reservation flow passed via the companion `gnscargo/tests/capacity-booking.cjs` harness: picker selection, replacement summary, stale error, RPC parameters, release and failed-load retry.
+- These checks used synthetic rolled-back database identities and a mocked client for DOM interaction; no real production user's Microsoft login was exercised.
