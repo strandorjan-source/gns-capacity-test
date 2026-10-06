@@ -50,14 +50,15 @@ export function UsersPanel({ profiles, profile, supabase, busy, access, refresh,
         <div><b>{person.full_name || t('Navn ikke registrert')}</b>
           <small>{person.email}{person.company ? ` · ${person.company}` : ''}</small>
           <small className="user-access-state">{t(person.approved ? 'Aktiv tilgang' : 'Uten tilgang')}</small>
+          {(person.platform_superuser || person.platform_blocked) && <small>GNS Cargo</small>}
         </div>
         <select aria-label={t('Rolle for {name}', { name: person.full_name || person.email })}
-          disabled={blocked || person.user_id === profile.user_id} value={person.role}
+          disabled={blocked || person.user_id === profile.user_id || person.platform_superuser || person.platform_blocked} value={person.role}
           onChange={event => access(person.user_id, { role: event.target.value })}>
           <option value="carrier">{t('Transportør')}</option><option value="dispatcher">{t('Dispatcher')}</option><option value="admin">{t('Admin')}</option>
         </select>
         <div className="user-actions">
-          <button disabled={blocked || person.user_id === profile.user_id}
+          <button disabled={blocked || person.user_id === profile.user_id || person.platform_superuser || person.platform_blocked}
             className={person.approved ? 'dangerButton' : 'approveButton'}
             onClick={() => { setError(''); setNotice(''); access(person.user_id, { approved: !person.approved }); }}>
             {t(person.approved ? 'Trekk tilgang' : 'Godkjenn')}

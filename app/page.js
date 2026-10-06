@@ -6,6 +6,7 @@ import { blankVehicle, isStaff, isAdmin, roleName, canDeleteVehicle, canEditVehi
 import { VehicleForm, VehicleTable, CapacityFilters, CapacityStatusTabs, VehicleTypeTabs, Modal, EventLog } from './vehicle-components';
 import LoadsBoard from './loads-board';
 import { UsersPanel, RemovedAccess } from './user-components';
+import { platformProfile, platformUsers } from '../lib/platform-access.mjs';
 
 // Capture provider errors before the SDK consumes/cleans the callback URL.
 const initialAuthError = typeof window !== 'undefined' ? authErrorFromUrl(window.location.href) : '';
@@ -25,6 +26,10 @@ async function readAll(query) {
 }
 
 async function ensureProfile(user) {
+  const platform = await withTimeout(supabase.rpc('platform_current_access'));
+  if (platform.error) throw platform.error;
+  const override = platformProfile(user, platform.data);
+  if (override) return override;
   const read = () => withTimeout(supabase.from('capacity_profiles').select('*').eq('user_id', user.id).maybeSingle());
   const existing = await read();
   if (existing.error) throw existing.error;
@@ -86,6 +91,9 @@ export default function Page() {
       let nextProfiles = [];
       if (isAdmin(nextProfile)) {
         nextProfiles = await readAll(() => supabase.from('capacity_profiles').select('*').is('deleted_at', null).order('created_at', { ascending: false }).order('user_id'));
+        const access = await withTimeout(supabase.rpc('capacity_platform_users'));
+        if (access.error) throw access.error;
+        nextProfiles = platformUsers(nextProfiles, access.data);
       }
       if (ticket !== generation.current) return;
       setProfile(nextProfile); setRows(vehicles); setProfiles(nextProfiles); setPhase('ready');
@@ -283,6 +291,7 @@ export default function Page() {
   if (phase === 'loading') return <Center title="GNS Capacity" text={_t("Laster sikker innlogging og kapasitet …")} spin />;
   if (phase === 'error') return <Center title={_t("Kunne ikke laste GNS Capacity")} text={_t(message)} retry={() => load(currentSession.current)} logout={session ? logout : null} />;
   if (!session) return <Login login={login} message={message} busy={busy} />;
+  if (profile?.platform_blocked) return <RemovedAccess logout={logout} busy={busy} />;
   if (profile?.deleted_at) return <RemovedAccess logout={logout} busy={busy} />;
   if (!profile?.approved) return <Pending profile={profile} save={savePending} logout={logout} busy={busy} message={message} refresh={refresh} />;
 
