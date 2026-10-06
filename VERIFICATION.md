@@ -103,3 +103,12 @@ Supabase advisors returned no Capacity-specific findings. Pre-existing shared-or
 - Real database role tests passed: register duplicates, access denial, stale order rejection without partial save, order assignment preserving prices, duplicate booking, release/rebook and audit retention.
 - All 67 existing unit tests and the production build passed. The mounted React reservation flow passed via the companion `gnscargo/tests/capacity-booking.cjs` harness: picker selection, replacement summary, stale error, RPC parameters, release and failed-load retry.
 - These checks used synthetic rolled-back database identities and a mocked client for DOM interaction; no real production user's Microsoft login was exercised.
+
+
+## 2026-10-06 — New Cargo order from a reserved vehicle
+
+- Reservation dialog now offers “Reserver og opprett Cargo-ordre”. Already reserved vehicles without an order offer “Opprett Cargo-ordre”.
+- Embedded Capacity switches to the Cargo tab; standalone Capacity navigates to Cargo. Only the reservation ID and timestamp cross the boundary. Cargo re-reads authorized vehicle data.
+- Cargo copies registration, trailer, carrier and carrier contact into separate fields, suggests the availability date, and requires the actual customer/pickup before saving. A previous form draft is preserved until the user explicitly chooses to use the vehicle.
+- New-order creation, stop creation and reservation linking use a single security-invoker RPC with vehicle locking, reservation/version checks and retry deduplication. The companion Cargo repo contains the migration and rollback-only SQL tests.
+- Verified: 69 Capacity unit tests, production build, mounted React new-order and existing-order actions, Cargo iframe origin/source checks, field mapping, draft preservation, and real database authorization/atomicity/retry tests. No real Microsoft user sign-in was exercised.

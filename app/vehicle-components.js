@@ -90,6 +90,7 @@ export function VehicleTable({ rows, profile, userId, busy, onAction, onEvents }
       <td className="reservation-cell">{row.status === 'Reservert' ? <><b>{row.reserved_by_name || row.reserved_by_email || _t('Ukjent bruker')}</b>{row.reserved_by_email && <small>{row.reserved_by_email}</small>}<small>{formatDate(row.reserved_at).join(' · ')}</small><p className="multiline">{row.reservation_comment || _t('Ingen lasskommentar registrert')}</p></> : <span className="muted">{_t("Ingen aktiv reservasjon")}</span>}</td>
       <td><div className="actions">
         {staff && !row.deleted_at && (!row.is_history || row.status === 'Reservert') && <button disabled={busy} className="book" onClick={() => onAction(row.status === 'Ledig' ? 'reserve' : 'release', row)}>{row.status === 'Ledig' ? _t('Reserver') : _t('Frigi')}</button>}
+        {staff && row.status === 'Reservert' && !row.reserved_order_id && !row.deleted_at && <button disabled={busy} className="iconButton" onClick={() => onAction('cargo', row)}>Opprett Cargo-ordre</button>}
         {canEditVehicle(profile, userId, row) && <button disabled={busy} className="iconButton" onClick={() => onAction('edit', row)}>{_t("Rediger")}</button>}
         {canDeleteVehicle(profile, userId, row) && <button disabled={busy} className="iconButton delete-button" onClick={() => onAction('delete', row)}>{_t("Slett")}</button>}
         {admin && row.deleted_at && <button disabled={busy} className="iconButton" onClick={() => onAction('restore', row)}>{_t("Gjenopprett")}</button>}
